@@ -29,6 +29,8 @@ typedef struct{
 extern sint8 sysTimeZone_H;
 extern sint8 sysTimeZone_M;
 
+extern u32_t systemUTC_current;
+extern u16	 sysTimeKeep_counter;
 extern stt_localTime systemTime_current;
 
 extern u8 	ifDelay_sw_running_FLAG;//延时及绿色模式是否运行标志位
@@ -37,6 +39,8 @@ extern u8	delayPeriod_onoff;		//延时动作周期
 extern u8	delayUp_act;			//延时响应具体动作
 extern u16	delayCnt_closeLoop;		//绿色模式计时计数
 extern u8	delayPeriod_closeLoop;	//绿色模式动作周期
+
+extern bool	ifNightMode_sw_running_FLAG; //设备夜间模式运行标志
 
 void sntp_timerActThread_Start(void);
 void timActing_ThreadStart(void);

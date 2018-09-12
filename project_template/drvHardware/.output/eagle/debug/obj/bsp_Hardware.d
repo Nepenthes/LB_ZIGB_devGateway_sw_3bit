@@ -82,4 +82,6 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/esp8266/gpio_register.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/pwm.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/driver_lib/include/spi_interface.h \
- D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/driver_lib/include/spi_register.h
+ D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/driver_lib/include/spi_register.h \
+ ../include/usrInterface_keylbutton.h ../include/usrInterface_Tips.h \
+ ../include/timer_Activing.h

@@ -3,7 +3,7 @@
 
 #include "esp_common.h"
 
-#define HARDWARE_VERSION_DEBUG	0
+#define HARDWARE_VERSION_DEBUG	1
 
 #if(HARDWARE_VERSION_DEBUG == 1)
 

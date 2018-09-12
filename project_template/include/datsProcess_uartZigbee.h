@@ -6,6 +6,8 @@
 
 #define uart_putDats(a,b,c)	uartZigbee_putDats(a,b,c)
 
+#define ZIGB_UTCTIME_START	946684800UL //zigbee时间戳从unix纪元946684800<2000/01/01 00:00:00>开始
+
 #define WIFI_FRAME_HEAD		0x7F
 #define ZIGB_FRAME_HEAD		0xFE
 
@@ -14,13 +16,14 @@
 #define ZIGB_FRAMEHEAD_HEARTBEAT		0xAB
 #define ZIGB_OFFLINEFRAMEHEAD_HEARTBEAT	0xBB
 
-#define ZIGB_ENDPOINT_CTRLNORMAL		13
-#define ZIGB_ENDPOINT_CTRLSYSZIGB		14
+#define ZIGB_ENDPOINT_CTRLSECENARIO		12 //场景集群控制专用端口
+#define ZIGB_ENDPOINT_CTRLNORMAL		13 //常规数据转发专用端口
+#define ZIGB_ENDPOINT_CTRLSYSZIGB		14 //zigb系统交互专用端口
 
 #define ZIGB_CLUSTER_DEFAULT_DEVID		13
 #define ZIGB_CLUSTER_DEFAULT_CULSTERID	13
 
-#define ZIGBNWKOPENTIME_DEFAULT	5 //zigb网络开放时间 默认值
+#define ZIGBNWKOPENTIME_DEFAULT	12 //zigb网络开放时间 默认值
 
 #define ZIGB_PANID_MAXVAL     	0x3FFF
 
@@ -32,11 +35,12 @@ extern xQueueHandle xMsgQ_zigbFunRemind;
 
 typedef enum{
 
-	msgFun_nwkOpen = 0,
-	msgFun_nodeSystimeSynchronous,
-	msgFun_localSystimeZigbAdjust,
-	msgFun_portCtrlEachoRegister,
-	msgFun_panidRealesNwkCreat,
+	msgFun_nwkOpen = 0, //开放网络
+	msgFun_nodeSystimeSynchronous, //UTC时间及时区下发至子设备同步
+	msgFun_localSystimeZigbAdjust, //本地zigb系统时间与UTC时间同步
+	msgFun_portCtrlEachoRegister, //互控端点（通讯簇）注册
+	msgFun_panidRealesNwkCreat, //本地zigb主机panid更新
+	msgFun_scenarioCrtl, //场景集群控制
 }enum_zigbFunMsg;
 
 typedef struct{

@@ -25,11 +25,16 @@ typedef enum{
 
 typedef void funKey_Callback(void);
 
-extern u16 touchPadActCounter; 
-extern u16 touchPadContinueCnt;  
+extern u8 	timeCounter_smartConfig_start;
+extern bool smartconfigOpen_flg;
+
+extern u16 	touchPadActCounter; 
+extern u16 	touchPadContinueCnt;  
 
 extern bool usrKeyCount_EN;
 extern u16	usrKeyCount;
+
+void usrSmartconfig_stop(void);
 
 void usrInterface_ThreadStart(void);
 

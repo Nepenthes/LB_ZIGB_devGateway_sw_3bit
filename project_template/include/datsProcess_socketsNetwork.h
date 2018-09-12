@@ -44,10 +44,14 @@
 #define FRAME_MtoZIGBCMD_cmdQue_ctrlEachO	0x42	/*命令*///普通开关互控端口查询
 #define FRAME_MtoZIGBCMD_cmdCfg_ledBackSet	0x43	/*命令*///普通开关背景灯设置 
 #define FRAME_MtoZIGBCMD_cmdQue_ledBackSet	0x44	/*命令*///普通开关背景灯查询
+#define FRAME_MtoZIGBCMD_cmdCfg_scenarioSet	0x45	/*命令*///普通开关场景配置
+#define FRAME_MtoZIGBCMD_cmdCfg_scenarioCtl	0x47	/*命令*///普通开关场景控制
+#define FRAME_MtoZIGBCMD_cmdCfg_scenarioDel	0x48	/*命令*///普通开关场景删除
 
 #define	cmdConfigTim_normalSwConfig			0xA0	/*定时数据辨识*///普通时刻定时
 #define cmdConfigTim_onoffDelaySwConfig		0xA1	/*定时数据辨识*///延时定时
 #define cmdConfigTim_closeLoopSwConfig		0xA2	/*定时数据辨识*///绿色模式循环关闭定时
+#define cmdConfigTim_nightModeSwConfig		0xA3	/*定时数据辨识*///夜间模式定时
 
 typedef enum{
 

@@ -6,12 +6,16 @@
 
 const u8 serverRemote_IP_Lanbon[4] = {47,52,5,108}; //47,52,5,108 香港 //112,124,61,191 中国
 
-//u8 CTRLEATHER_PORT[clusterNum_usr] = {0x1A, 0x1B, 0x1C}; //互控端口位
-u8 CTRLEATHER_PORT[clusterNum_usr] = {0, 0, 0}; //互控端口位
+stt_scenarioOprateDats scenarioOprateDats = {0};
+
+//u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0x1A, 0x1B, 0x1C}; //互控端口位
+u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0, 0, 0}; //互控端口位
 
 u8 MACSTA_ID[DEV_MAC_LEN] = {0};
 u8 MACAP_ID[DEV_MAC_LEN] = {0};
 u8 MACDST_ID[DEV_MAC_LEN] = {0};
+
+bool deviceLock_flag = false; //设备锁标志
 
 u8 DEV_actReserve = 0x07; //有效操作位
 u8 SWITCH_TYPE = SWITCH_TYPE_SWBIT3;
@@ -46,9 +50,9 @@ portCtrlEachOther_Reales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
 
-	memcpy(datsRead_Temp->port_ctrlEachother, CTRLEATHER_PORT, clusterNum_usr);
+	memcpy(datsRead_Temp->port_ctrlEachother, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER);
 
-	os_free(datsRead_Temp);
+	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
 void ICACHE_FLASH_ATTR
@@ -62,6 +66,16 @@ devMAC_Reales(void){
 
 	memcpy(MACSTA_ID, debug_staMAC, 6);
 	memcpy(MACAP_ID, debug_apMAC, 6);
+}
+
+void ICACHE_FLASH_ATTR
+devLockIF_Reales(void){
+
+	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
+
+	(datsRead_Temp->dev_lockIF)?(deviceLock_flag = true):(deviceLock_flag = false);
+
+	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
 void ICACHE_FLASH_ATTR
@@ -142,6 +156,12 @@ devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSav
 
 				dats_Temp.swDelay_periodCloseLoop = datsSave_Temp.swDelay_periodCloseLoop;
 			
+			}break;
+
+		case obj_devNightModeTimer_Tab:{
+
+				memcpy(dats_Temp.devNightModeTimer_Tab, datsSave_Temp.devNightModeTimer_Tab, 3 * 2);
+
 			}break;
 
 		case obj_port_ctrlEachother:{

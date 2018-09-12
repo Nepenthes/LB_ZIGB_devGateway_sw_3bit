@@ -64,13 +64,10 @@ LOCAL os_timer_t usrTimer_reference;
 extern xQueueHandle xMsgQ_zigbFunRemind;
 extern xQueueHandle xMsgQ_devUpgrade;
 
-extern u16 sysTimeKeep_counter;
-
-extern u8 counter_tipsAct;
-
 void devConnectAP_autoInit(char P_ssid[32], char P_password[64]);
-LOCAL void ICACHE_FLASH_ATTR somartConfig_standBy(void);
-LOCAL void ICACHE_FLASH_ATTR somartConfig_complete(void);
+void somartConfig_complete(void);
+
+LOCAL void somartConfig_standBy(void);
 /*---------------------------------------------------------------------------------------------*/
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -100,9 +97,9 @@ smartconfig_done_tp(sc_status status, void *pdata)
             break;
         case SC_STATUS_FIND_CHANNEL:
             os_printf("SC_STATUS_FIND_CHANNEL\n");
-			somartConfig_standBy(); //常规定时器暂停
             break;
         case SC_STATUS_GETTING_SSID_PSWD:
+			somartConfig_standBy(); //常规定时器暂停
             os_printf("SC_STATUS_GETTING_SSID_PSWD\n");
             sc_type *type = pdata;
             if (*type == SC_TYPE_ESPTOUCH) {
@@ -476,6 +473,7 @@ timerFunCB_usrReference(void *para){
 				
 				swCommand_fromUsr.actMethod = relay_OnOff; //动作响应
 				swCommand_fromUsr.objRelay = delayUp_act;
+				devStatus_pushIF = true; //开关状态数据推送
 			}
 		}	
 
@@ -489,26 +487,19 @@ timerFunCB_usrReference(void *para){
 			
 				swCommand_fromUsr.actMethod = relay_OnOff; //动作响应
 				swCommand_fromUsr.objRelay = 0;
+				devStatus_pushIF = true; //开关状态数据推送
 			}
 		}
 
 		//用户操作闲置释放计时
 		if(counter_ifTipsFree)counter_ifTipsFree --;
 
-		//系统本地时间维持更新
-		sysTimeKeep_counter ++;
+		//zigb网络开放倒计时
+		if(timeCount_zigNwkOpen)timeCount_zigNwkOpen --;
 	}
 
-	//触摸按键计时业务逻辑
-	if(touchPadActCounter)touchPadActCounter --; //按下时间
-	if(touchPadContinueCnt)touchPadContinueCnt --; //连按间隔时间
-
-	//轻触按键计时业务逻辑
-	if(usrKeyCount_EN)usrKeyCount ++;
-	else usrKeyCount = 0;
-
-	//tips动作周期计时计数专用
-	if(counter_tipsAct)counter_tipsAct --;
+	/*其它1ms定时业务*/
+	
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -519,7 +510,7 @@ somartConfig_standBy(void){ //smartConfig时中断所有定时器
 	localTimerPause_sntpTimerAct();
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+void ICACHE_FLASH_ATTR
 somartConfig_complete(void){ //smartConfig结束时恢复所有被中断的定时器
 
 	os_timer_arm(&timer_Test, TIMERPERIOD_USRTEST_FUN, true);
@@ -561,7 +552,7 @@ void user_init(void)
 
 	smartconfig_stop();
 
-	wifi_set_opmode(STATIONAP_MODE);
+	wifi_set_opmode(STATION_MODE);
 	
 	devMAC_Reales(); //MAC更新
 	ledBKGColorSw_Reales(); //背景灯色索引更新
@@ -569,6 +560,8 @@ void user_init(void)
 	datsTiming_getRealse(); //定时数据更新
 	timeZone_Reales(); //时区数据更新
 	datsDelayOP_getReales(); //延时操作数据更新
+	devLockIF_Reales(); //设备锁数据更新
+	timeZone_Reales(); //时区更新
 	
 //	wifi_station_disconnect();
 	wifi_station_set_auto_connect(1); 

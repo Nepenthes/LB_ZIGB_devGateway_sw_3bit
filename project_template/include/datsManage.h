@@ -6,12 +6,21 @@
 
 #include "datsManage.h"
 
-#define clusterNum_usr			3 //互控端口数
+
+#define WIFIMODE_STA			1
+#define WIFIMODE_AP				2
+#define WIFIMODE_APSTA			3
+
+#define scenarioCtrlDats_LENGTH 1000 //场景控制数据包长度限制
+
+#define USRCLUSTERNUM_CTRLEACHOTHER			3 //互控端口数
 
 #define DEVZIGB_DEFAULT			0x33
 
 #define DEV_SWITCH_TYPE			0xA3
 #define DEV_MAC_LEN				6
+
+#define SMARTCONFIG_TIMEOPEN_DEFULT		45 //smartconfig启动时间限制
 
 #define SWITCH_TYPE_SWBIT1	 	0x01 + 0xA0 //设备类型，一位开关
 #define SWITCH_TYPE_SWBIT2	 	0x02 + 0xA0 //设备类型，二位开关
@@ -23,6 +32,19 @@
 //#define DATS_LOCATION_START		0x0F9	//08Mbit
 
 #define DEBUG_LOGLEN			128
+
+typedef struct{
+
+	u8 devNode_MAC[5];
+	u8 devNode_opStatus;
+}scenarioOprate_Unit;
+
+typedef struct{
+
+	bool scenarioCtrlOprate_IF; //场景集群控制使能
+    scenarioOprate_Unit scenarioOprate_Unit[100]; //集群节点MAC
+	u8 devNode_num; //集群节点数目
+}stt_scenarioOprateDats;
 
 typedef struct{
 
@@ -40,8 +62,9 @@ typedef struct{
 	u8  swTimer_Tab[3 * 4];	//定时表
 	u8  swDelay_flg; //延时及绿色模式标志
 	u8  swDelay_periodCloseLoop; //绿色模式周期
+	u8  devNightModeTimer_Tab[3 * 2]; //夜间模式定时表
 
-	u8  port_ctrlEachother[clusterNum_usr]; //互控端口
+	u8  port_ctrlEachother[USRCLUSTERNUM_CTRLEACHOTHER]; //互控端口
 
 	u16 panID_default; //PANID
 
@@ -65,6 +88,7 @@ typedef enum{
 	obj_swTimer_Tab,
 	obj_swDelay_flg,
 	obj_swDelay_periodCloseLoop,
+	obj_devNightModeTimer_Tab,
 
 	obj_port_ctrlEachother,
 	
@@ -120,7 +144,10 @@ extern const u8 serverRemote_IP_Lanbon[4];
 extern u8 SWITCH_TYPE;
 extern u8 DEV_actReserve;
 
-extern u8 CTRLEATHER_PORT[clusterNum_usr];
+extern stt_scenarioOprateDats scenarioOprateDats;
+extern u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER];
+
+extern bool deviceLock_flag;
 
 extern u8 MACSTA_ID[6];
 extern u8 MACAP_ID[6];
@@ -130,6 +157,8 @@ void smartconfig_done_tp(sc_status status, void *pdata);
 
 void portCtrlEachOther_Reales(void);
 void devMAC_Reales(void);
+void devLockIF_Reales(void);
+
 u8 switchTypeReserve_GET(void);
 
 void printf_datsHtoA(const u8 *TipsHead, u8 *dats , u8 datsLen);

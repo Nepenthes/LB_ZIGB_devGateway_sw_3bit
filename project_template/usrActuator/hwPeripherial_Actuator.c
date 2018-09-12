@@ -11,6 +11,9 @@ relay_Command swCommand_fromUsr	= {0, actionNull};
 
 u8 EACHCTRL_realesFLG = 0; //互控更新使能标志 标志（一位：bit0\二位：bit1\三位：bit2）
 
+bool devStatus_pushIF = false; //推送使能
+relayStatus_PUSH devActionPush_IF = {0}; //推送执行数据
+
 LOCAL xTaskHandle pxTaskHandle_threadRelayActing;
 /*---------------------------------------------------------------------------------------------*/
 
@@ -37,7 +40,7 @@ actuatorRelay_Init(void){
 
 		status_actuatorRelay = statusTemp;
 	
-		os_free(datsRead_Temp);
+		if(datsRead_Temp)os_free(datsRead_Temp);
 	
 	}else{
 
@@ -57,6 +60,8 @@ LOCAL void ICACHE_FLASH_ATTR
 actuatorRelay_Act(relay_Command dats){
 	
 	u8 statusTemp = 0;
+
+	statusTemp = status_actuatorRelay; //当前开关至暂存
 	
 	switch(dats.actMethod){ //根据动作类型响应动作
 	
@@ -80,6 +85,17 @@ actuatorRelay_Act(relay_Command dats){
 		
 	}
 	relay_statusReales(); //硬件响应加载
+
+	devActionPush_IF.dats_Push = 0;
+	devActionPush_IF.dats_Push |= (status_actuatorRelay & 0x07); //当前开关状态位填装<低三位>
+	if(		(statusTemp & 0x01) != (status_actuatorRelay & 0x01))devActionPush_IF.dats_Push |= 0x20; //更改值填装<高三位>第一位
+	else if((statusTemp & 0x02) != (status_actuatorRelay & 0x02))devActionPush_IF.dats_Push |= 0x40; //更改值填装<高三位>第二位
+	else if((statusTemp & 0x04) != (status_actuatorRelay & 0x04))devActionPush_IF.dats_Push |= 0x80; //更改值填装<高三位>第三位
+	if(devStatus_pushIF){
+
+		devStatus_pushIF = false;
+		devActionPush_IF.push_IF = true;
+	}
 	
 	if(status_actuatorRelay)delayCnt_closeLoop = 0; //继电器开则立即更新绿色模式计时
 	

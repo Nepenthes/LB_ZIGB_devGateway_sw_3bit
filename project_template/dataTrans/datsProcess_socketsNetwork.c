@@ -65,7 +65,6 @@ frame_Check(unsigned char frame_temp[], u8 check_num){
 	return val_Check;
 }
 
-
 LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_S2Z(void){
 
@@ -213,7 +212,8 @@ timer_heartBeatKeep_funCB(void *para){
 //			printf_datsHtoA("[Tips_threadNet]: hearBeat datsSend is:", heartBeat_Pack, dataHeartBeatLength_objSERVER);
 //			(heartbeat_oeFLG)?(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats1, 14)):(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats2, 14));
 		}
-	}else{
+	}
+	else{
 
 		
 	}
@@ -264,10 +264,16 @@ socketsDataTransProcess_task(void *pvParameters){
 		
 						case FRAME_MtoSCMD_cmdControl:{
 
+							repeatTX_buff[11] = 0;
+							repeatTX_buff[11] |= (rptr_socketDats.dats[11] & 0x07); //当前开关状态位填装<低三位>
+							if( 	(rptr_socketDats.dats[11] & 0x01) != (status_actuatorRelay & 0x01))repeatTX_buff[11] |= 0x20; //更改值填装<高三位>第一位
+							else if((rptr_socketDats.dats[11] & 0x02) != (status_actuatorRelay & 0x02))repeatTX_buff[11] |= 0x40; //更改值填装<高三位>第二位
+							else if((rptr_socketDats.dats[11] & 0x04) != (status_actuatorRelay & 0x04))repeatTX_buff[11] |= 0x80; //更改值填装<高三位>第三位
+
 							swCommand_fromUsr.objRelay = rptr_socketDats.dats[11];
 							swCommand_fromUsr.actMethod = relay_OnOff;
 
-							repeatTX_buff[11] = rptr_socketDats.dats[11];
+							os_printf("ctrl data: %02X, pushData: %02X.\n", rptr_socketDats.dats[11], repeatTX_buff[11]);
 		
 							specialCMD_IF		= false;
 							socketRespond_IF	= true;
@@ -275,6 +281,9 @@ socketsDataTransProcess_task(void *pvParameters){
 						}break;
 		
 						case FRAME_MtoSCMD_cmdConfigSearch:{
+
+							sysTimeZone_H = rptr_socketDats.dats[12];
+							sysTimeZone_M = rptr_socketDats.dats[13];
 
 							datsSave_Temp.timeZone_H = rptr_socketDats.dats[12];
 							datsSave_Temp.timeZone_M = rptr_socketDats.dats[13];
@@ -304,17 +313,26 @@ socketsDataTransProcess_task(void *pvParameters){
 						}break;
 		
 						case FRAME_MtoSCMD_cmdReset:{
-		
+
+							
 							
 						}break;
 		
 						case FRAME_MtoSCMD_cmdLockON:{
-		
+
+							datsSave_Temp.dev_lockIF = 1;
+							devParam_flashDataSave(obj_dev_lockIF, datsSave_Temp);
+						
+							deviceLock_flag = true;
 							
 						}break;
 		
 						case FRAME_MtoSCMD_cmdLockOFF:{
-		
+							
+							datsSave_Temp.dev_lockIF = 0;
+							devParam_flashDataSave(obj_dev_lockIF, datsSave_Temp);
+
+							deviceLock_flag = false;
 							
 						}break;
 		
@@ -343,6 +361,8 @@ socketsDataTransProcess_task(void *pvParameters){
 									}
 											
 									specialCMD_IF = true; //特殊占位指令
+
+									if(datsRead_Temp)os_free(datsRead_Temp);
 									
 								}break;
 
@@ -361,9 +381,25 @@ socketsDataTransProcess_task(void *pvParameters){
 									repeatTX_buff[14] = delayPeriod_closeLoop;
 									
 								}break;
+
+								/*设备夜间模式*/
+								case cmdConfigTim_nightModeSwConfig:{
+
+									datsRead_Temp = devParam_flashDataRead();
+
+									memcpy(&repeatTX_buff[14], datsRead_Temp->devNightModeTimer_Tab, 3 * 2);
+									(ifNightMode_sw_running_FLAG)?(repeatTX_buff[12] |= 0x02):(repeatTX_buff[12] &= ~0x02);
+
+									if(datsRead_Temp)os_free(datsRead_Temp);
 								
+								}break;
+
 								default:break;
 							}
+
+							if(datsRead_Temp)os_free(datsRead_Temp);
+
+							repeatTX_buff[13] = rptr_socketDats.dats[13]; //子命令回复
 
 							socketRespond_IF = true;
 							
@@ -375,13 +411,35 @@ socketsDataTransProcess_task(void *pvParameters){
 						
 						}break;
 		
-						case FRAME_MtoSCMD_cmdBeepsON:{
-		
+						case FRAME_MtoSCMD_cmdBeepsON:{ //蜂鸣器开命令代表夜间模式关闭
+
+							datsRead_Temp = devParam_flashDataRead();
 							
+							datsSave_Temp.devNightModeTimer_Tab[0]	= datsRead_Temp->devNightModeTimer_Tab[0]; //存储数据更新
+							datsSave_Temp.devNightModeTimer_Tab[0] &= ~0x7F; //全天夜间失能
+							devParam_flashDataSave(obj_devNightModeTimer_Tab, datsSave_Temp);
+
+							datsTiming_getRealse(); //本地运行数据更新
+							
+							if(datsRead_Temp)os_free(datsRead_Temp);
+
+							socketRespond_IF = true;
+
 						}break;
 		
-						case FRAME_MtoSCMD_cmdBeepsOFF:{
-		
+						case FRAME_MtoSCMD_cmdBeepsOFF:{ //蜂鸣器关命令代表夜间模式开启
+
+							datsRead_Temp = devParam_flashDataRead();
+							
+							datsSave_Temp.devNightModeTimer_Tab[0]	= datsRead_Temp->devNightModeTimer_Tab[0]; //存储数据更新
+							datsSave_Temp.devNightModeTimer_Tab[0] |= 0x7F; //全天夜间使能
+							devParam_flashDataSave(obj_devNightModeTimer_Tab, datsSave_Temp);
+
+							datsTiming_getRealse(); //本地运行数据更新
+							
+							if(datsRead_Temp)os_free(datsRead_Temp);
+
+							socketRespond_IF = true;
 							
 						}break;
 		
@@ -420,6 +478,7 @@ socketsDataTransProcess_task(void *pvParameters){
 
 									memcpy(datsSave_Temp.swTimer_Tab, &(rptr_socketDats.dats[14]), 4 * 3);
 									devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //存储数据更新
+									
 									datsTiming_getRealse(); //本地运行数据更新
 				
 								}break;
@@ -466,7 +525,17 @@ socketsDataTransProcess_task(void *pvParameters){
 									devParam_flashDataSave(obj_swDelay_flg, datsSave_Temp);
 									devParam_flashDataSave(obj_swDelay_periodCloseLoop, datsSave_Temp);
 									
-								}break;								
+								}break;			
+
+								/*设备夜间模式*/
+								case cmdConfigTim_nightModeSwConfig:{
+
+									memcpy(datsSave_Temp.devNightModeTimer_Tab, &rptr_socketDats.dats[14], 3 * 2); //存储数据更新
+									devParam_flashDataSave(obj_devNightModeTimer_Tab, datsSave_Temp);
+
+									datsTiming_getRealse(); //本地运行数据更新
+								
+								}break;
 								
 								default:break;
 							}
@@ -526,7 +595,7 @@ socketsDataTransProcess_task(void *pvParameters){
 							u8 loop = 0;
 							u8 effective_oprate = rptr_socketDats.dats[12]; //有效数据操作占位获取
 							
-							for(loop = 0; loop < clusterNum_usr; loop ++){
+							for(loop = 0; loop < USRCLUSTERNUM_CTRLEACHOTHER; loop ++){
 							
 								if((effective_oprate >> loop) & 0x01){ //有效数据判断
 								
@@ -546,7 +615,7 @@ socketsDataTransProcess_task(void *pvParameters){
 
 						case FRAME_MtoZIGBCMD_cmdQue_ctrlEachO:{
 
-							memcpy(&repeatTX_buff[14], CTRLEATHER_PORT, clusterNum_usr);
+							memcpy(&repeatTX_buff[14], CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER);
 
 							socketRespond_IF = true;
 
@@ -573,6 +642,41 @@ socketsDataTransProcess_task(void *pvParameters){
 								
 							socketRespond_IF = true;
 						
+						}break;
+
+						case FRAME_MtoZIGBCMD_cmdCfg_scenarioCtl:{
+
+							if(scenarioOprateDats.scenarioCtrlOprate_IF){
+
+								u8 loop = 0;
+
+								for(loop = 0; loop < scenarioOprateDats.devNode_num; loop ++){ //查找网关自身MAC是否在内
+
+									if(!memcmp(&MACSTA_ID[1], scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC, 5)){ //本身存在于场景就响应动作
+
+										swCommand_fromUsr.objRelay = scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus;
+										swCommand_fromUsr.actMethod = relay_OnOff;
+
+										break;
+									}
+								}
+
+								enum_zigbFunMsg mptr_zigbFunRm = msgFun_scenarioCrtl; //消息即刻转发至zigb线程进行场景集群控制下发
+								xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
+								
+								for(loop = 0; loop < scenarioOprateDats.devNode_num; loop ++){ //log打印
+
+									os_printf("devNode<%02d>MAC:[%02X %02X %02X %02X %02X] --opStatus:{%02X}.\n",
+										      loop,
+										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[0],
+										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[1],
+										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[2],
+										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[3],
+										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[4],
+										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus);
+								}
+							}
+
 						}break;
 
 						default:{
@@ -712,7 +816,31 @@ socketsDataTransProcess_task(void *pvParameters){
 			}
 		}
 
-/*>>>>>>zigbee消息数据处理<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
+/*>>>>>>开关状态改变，推送响应处理<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
+		if(devActionPush_IF.push_IF){
+
+			devActionPush_IF.push_IF = false;
+
+			const bool specialCMD_IF = false;
+
+#define swActionPush_repeatTxLen	45
+			u8 repeatTX_buff[swActionPush_repeatTxLen] = {0};
+			u8 repeatTX_Len = 0;	
+
+			repeatTX_buff[11] = devActionPush_IF.dats_Push; //推送数据信息填装
+
+			repeatTX_Len = dtasTX_loadBasic_CUSTOM( DATATRANS_objFLAG_REMOTE,		//发送前最后填装
+													repeatTX_buff,				
+													FRAME_TYPE_StoM_RCVsuccess,
+													FRAME_MtoSCMD_cmdControl,
+													specialCMD_IF);
+			
+			sockets_datsSend(Obj_udpRemote_B, repeatTX_buff, repeatTX_Len);
+
+			os_printf("swData push:%02X.\n", devActionPush_IF.dats_Push);
+		}
+
+/*>>>>>>zigbee消息数据处理<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
 		xMsgQ_rcvResult = xQueueReceive(xMsgQ_Zigb2Socket, (void *)&rptr_Z2S, 0);
 		if(xMsgQ_rcvResult == pdTRUE){
 

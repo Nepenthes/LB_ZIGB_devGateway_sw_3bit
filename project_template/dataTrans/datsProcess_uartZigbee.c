@@ -122,12 +122,12 @@ zigbDev_eptCreat(nwkStateAttr_Zigb *pHead,nwkStateAttr_Zigb pNew){
 
 /*zigbee节点提取从设备链表中，根据网络短地址;！！！谨记使用完节点信息后将内存释放！！！*/
 LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
-*zigbDev_eptPutout_BYnwk(nwkStateAttr_Zigb *pHead,u16 nwkAddr,bool method){	//method = 1,源节点地址返回，操作返回内存影响源节点信息; method = 0,映射信息地址返回，操作返回内存，不影响源节点信息�?
+*zigbDev_eptPutout_BYnwk(nwkStateAttr_Zigb *pHead,u16 nwkAddr,bool method){	//method = 1,源节点地址返回，操作返回内存影响源节点信息; method = 0,映射信息地址返回，操作返回内存，不影响源节点信息.
 	
 	nwkStateAttr_Zigb *pAbove = pHead;
 	nwkStateAttr_Zigb *pFollow;
 	
-	nwkStateAttr_Zigb *pTemp = (nwkStateAttr_Zigb *) os_zalloc(sizeof(nwkStateAttr_Zigb));
+	nwkStateAttr_Zigb *pTemp = (nwkStateAttr_Zigb *)os_zalloc(sizeof(nwkStateAttr_Zigb));
 	pTemp->next = NULL;
 	
 	while(!(pAbove->nwkAddr == nwkAddr) && pAbove->next != NULL){
@@ -146,6 +146,7 @@ LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
 			pTemp->onlineDectect_LCount = pAbove->onlineDectect_LCount;
 		}else{
 			
+			os_free(pTemp);
 			pTemp = pAbove;	
 		}
 		
@@ -159,7 +160,7 @@ LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
 
 /*zigbee节点提取从设备链表中，根据节点设备MAC地址和设备类型;！！！谨记使用完节点信息后将内存释放！！！*/
 LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
-*zigbDev_eptPutout_BYpsy(nwkStateAttr_Zigb *pHead,u8 macAddr[DEVMAC_LEN],u8 devType,bool method){		//method = 1,源节点地址返回，操作返回内存影响源节点信息; method = 0,映射信息地址返回，操作返回内存，不影响源节点信息�?
+*zigbDev_eptPutout_BYpsy(nwkStateAttr_Zigb *pHead,u8 macAddr[DEVMAC_LEN],u8 devType,bool method){		//method = 1,源节点地址返回，操作返回内存影响源节点信息; method = 0,映射信息地址返回，操作返回内存，不影响源节点信息.
 	nwkStateAttr_Zigb *pAbove = pHead;
 	nwkStateAttr_Zigb *pFollow;
 	
@@ -181,7 +182,8 @@ LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
 			pTemp->devType 				= pAbove->devType;
 			pTemp->onlineDectect_LCount = pAbove->onlineDectect_LCount;
 		}else{
-			
+
+			os_free(pTemp);
 			pTemp = pAbove;	
 		}
 		
@@ -602,7 +604,7 @@ zigb_clusterCtrlEachotherCfg(void){
 	u8 loop = 0;
 	bool config_Result = false;
 
-	for(loop = 0; loop < clusterNum_usr; loop ++){
+	for(loop = 0; loop < USRCLUSTERNUM_CTRLEACHOTHER; loop ++){
 
 		if(CTRLEATHER_PORT[loop] > 0x10 && CTRLEATHER_PORT[loop] < 0xFF){
 
@@ -654,8 +656,23 @@ zigB_sysTimeSet(u32_t timeStamp){
 	const datsAttr_ZigbInit default_param = {{0x21,0x10},{0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},0x0B,{0xFE,0x01,0x61,0x10,0x00},0x05,30}; //zigbee系统时间设置，默认参�?
 	u8 timeStampArray[11] = {0};
 	bool resultSet = false;
-	u32_t timeStamp_temp = timeStamp + (3600UL * (long)sysTimeZone_H + 60UL * (long)sysTimeZone_M);
+	u32_t timeStamp_temp = timeStamp;
 
+	if(sysTimeZone_H <= 12){
+	
+		timeStamp_temp += (3600UL * (long)sysTimeZone_H + 60UL * (long)sysTimeZone_M); //时区正
+		
+	}else
+	if(sysTimeZone_H > 12 && sysTimeZone_H <= 24){
+	
+		timeStamp_temp -= (3600UL * (long)(sysTimeZone_H - 12) + 60UL * (long)sysTimeZone_M); //时区负
+		
+	}else
+	if(sysTimeZone_H == 30 || sysTimeZone_H == 31){ 
+		
+		timeStamp_temp += (3600UL * (long)(sysTimeZone_H - 17) + 60UL * (long)sysTimeZone_M); //时区特殊
+	}
+	
 	timeStampArray[0] = (u8)((timeStamp_temp & 0x000000ff) >> 0);
 	timeStampArray[1] = (u8)((timeStamp_temp & 0x0000ff00) >> 8);
 	timeStampArray[2] = (u8)((timeStamp_temp & 0x00ff0000) >> 16);
@@ -681,7 +698,7 @@ zigB_sysTimeSet(u32_t timeStamp){
 LOCAL bool ICACHE_FLASH_ATTR
 zigB_sysTimeGetRealesWithLocal(void){
 
-//	u32_t timeStamp_temp = 0;
+	u32_t timeStamp_temp = 0;
 	datsZigb_reqGet *local_datsParam = (datsZigb_reqGet *)os_zalloc(sizeof(datsZigb_reqGet));
 	const u8 frameREQ_zigbSysTimeGet[5] = {0xFE, 0x00, 0x21, 0x11, 0x30};	//zigb系统时间获取指令帧
 	const u8 cmdResp_zigbSysTimeGet[2] 	= {0x61, 0x11};	//zigb系统时间获取预期响应指令
@@ -695,12 +712,14 @@ zigB_sysTimeGetRealesWithLocal(void){
 
 	if(true == resultREQ){
 
-		/*zigee纪元时间*/
-//		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[4]) << 0)  & 0x000000FF);
-//		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[5]) << 8)  & 0x0000FF00);
-//		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[6]) << 16) & 0x00FF0000);
-//		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[7]) << 24) & 0xFF000000);
+		/*本地系统UTC更新*/
+		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[4]) << 0)  & 0x000000FF);
+		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[5]) << 8)  & 0x0000FF00);
+		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[6]) << 16) & 0x00FF0000);
+		timeStamp_temp |= (((u32_t)(local_datsParam->frameResp[7]) << 24) & 0xFF000000);
+		systemUTC_current = timeStamp_temp + ZIGB_UTCTIME_START;  //zigb系统协议UTC补偿
 
+		/*本地系统格式时间更新*/
 		u16 Y_temp16 = ((u16)local_datsParam->frameResp[13] << 0) | ((u16)local_datsParam->frameResp[14] << 8);
 		u8  Y_temp8 = 0;
 		u8  M_temp8 = 0;
@@ -926,8 +945,9 @@ ZigB_inspectionSelf(bool hwReset_IF){ //是否硬件复位
 		if(local_datsParam->frameResp[4] != 0x09)resultREQ = false;
 		else{
 
-			resultREQ = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLNORMAL);	//设备ID默认13，注册常规端点口—13
-			if(resultREQ)resultREQ = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLSYSZIGB);	//设备ID默认13，注册常规端点口—13
+			resultREQ = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLSECENARIO);	//设备ID默认13，注册场景控制端点口—12
+			if(resultREQ)resultREQ = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLNORMAL);	//设备ID默认13，注册常规端点口—13
+			if(resultREQ)resultREQ = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLSYSZIGB); //设备ID默认13，注册系统交互端点口—14
 			if(resultREQ)resultREQ = zigb_clusterCtrlEachotherCfg(); //互控端口注册
 			if(resultREQ)resultREQ = zigbNetwork_OpenIF(0, 0); //关闭网络
 		}
@@ -1082,8 +1102,9 @@ ZigB_NwkCreat(uint16_t PANID, uint8_t CHANNELS){
 
 	os_printf("[Tips_uartZigb]: Zigbee nwkCreat all complete !!!\n");
 
-	bool result_Set = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLNORMAL);	//设备ID默认13，注册常规端点口—13
-	if(result_Set)result_Set = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLSYSZIGB);	//设备ID默认13，注册常规端点口—14
+	bool result_Set = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLSECENARIO); //设备ID默认13，注册场景控制端点口—12
+	if(result_Set)result_Set =zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLNORMAL); //设备ID默认13，注册常规端点口—13
+	if(result_Set)result_Set = zigb_clusterSet(ZIGB_CLUSTER_DEFAULT_DEVID, ZIGB_ENDPOINT_CTRLSYSZIGB); //设备ID默认13，注册系统交互端点口—14
 	if(result_Set)result_Set = zigb_clusterCtrlEachotherCfg();
 
 	return result_Set;
@@ -1220,7 +1241,7 @@ ZigB_PANIDReales(bool inspection_IF){ //是否自检
 		}
 	}
 
-	os_free(datsRead_Temp);
+	if(datsRead_Temp)os_free(datsRead_Temp);
 
 	if(result){
 
@@ -1234,6 +1255,38 @@ ZigB_PANIDReales(bool inspection_IF){ //是否自检
 	}
 
 	return result;
+}
+
+/*zigbee数据发送*/
+LOCAL void ICACHE_FLASH_ATTR
+ZigB_remoteDatsSend(u16 DstAddr, //地址
+						  u8 dats[], //数据
+                          u8 datsLen, //数据长度
+                          u8 port){ //端口
+
+	const u8 zigbProtocolCMD_dataSend[2] = {0x24,0x01};
+	const u8 TransID = 13;
+	const u8 Option	 = 0;
+	const u8 Radius	 = 7;
+
+	u8 buf_datsTX[32] = {0};
+	u8 datsTX[48] = {0};
+	u8 datsTX_Len = 0;
+
+	buf_datsTX[0] = (uint8)((DstAddr & 0x00ff) >> 0);
+	buf_datsTX[1] = (uint8)((DstAddr & 0xff00) >> 8);
+	buf_datsTX[2] = port;
+	buf_datsTX[3] = port;
+	buf_datsTX[4] = ZIGB_CLUSTER_DEFAULT_CULSTERID;
+	buf_datsTX[6] = TransID;
+	buf_datsTX[7] = Option;
+	buf_datsTX[8] = Radius;
+	buf_datsTX[9] = datsLen;
+	memcpy(&buf_datsTX[10],dats,datsLen);	
+
+	datsTX_Len = ZigB_TXFrameLoad(datsTX, (u8 *)zigbProtocolCMD_dataSend, 2, (u8 *)buf_datsTX, datsLen + 10);
+
+	uartZigbee_putDats(UART0, datsTX, datsTX_Len);
 }
 
 /*zigbee数据发送*/
@@ -1267,11 +1320,11 @@ ZigB_datsTX(uint16 		DstAddr,
 	uint8 datsTX[96] = {0};
 	uint8 datsTX_Len = 0;
 
-	datsZigb_reqGet *local_datsParam = (datsZigb_reqGet *)malloc(sizeof(datsZigb_reqGet));
+	datsZigb_reqGet *local_datsParam = (datsZigb_reqGet *)os_zalloc(sizeof(datsZigb_reqGet));
 	
 	bool TXCMP_FLG = false;
 	
-	datsAttr_ZigbTrans *local_datsRX = (datsAttr_ZigbTrans *)malloc(sizeof(datsAttr_ZigbTrans));
+	datsAttr_ZigbTrans *local_datsRX = (datsAttr_ZigbTrans *)os_zalloc(sizeof(datsAttr_ZigbTrans));
 	
 	//接收帧填装，本地
 	ASR_dats[0] = 0x00;
@@ -1338,8 +1391,8 @@ ZigB_datsTX(uint16 		DstAddr,
 		}
 	}
 	
-	free(local_datsRX);
-	os_free(local_datsParam);
+	if(local_datsRX)os_free(local_datsRX);
+	if(local_datsParam)os_free(local_datsParam);
 	
 	return TXCMP_FLG;
 }
@@ -1393,9 +1446,9 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 	u8 loop = 0;
 
-	datsAttr_ZigbTrans *local_datsRX = (datsAttr_ZigbTrans *)malloc(sizeof(datsAttr_ZigbTrans));	//数据接收缓存
+	datsAttr_ZigbTrans *local_datsRX = (datsAttr_ZigbTrans *)os_zalloc(sizeof(datsAttr_ZigbTrans));	//数据接收缓存
 
-	nwkStateAttr_Zigb *zigbDevList_Head = (nwkStateAttr_Zigb *) os_zalloc(sizeof(nwkStateAttr_Zigb));	//节点设备信息链表 表头创建
+	nwkStateAttr_Zigb *zigbDevList_Head = (nwkStateAttr_Zigb *)os_zalloc(sizeof(nwkStateAttr_Zigb));	//节点设备信息链表 表头创建
 	const u16 zigbDetect_nwkNodeDev_Period = 1000;	//节点设备链表检测定时器更新周期（单位：ms）
 	const u8  zigDev_lifeCycle = 20;	//节点设备心跳周期（单位：s），周期内无心跳更新，节点设备将被判决死亡同时从链表中优化清除
 	nwkStateAttr_Zigb *ZigbDevNew_temp;	//节点设备信息缓存
@@ -1444,24 +1497,28 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 						u32_t timeStmap_temp = 0UL;
 
-						if(nwkInternetOnline_IF){
+//						if(nwkInternetOnline_IF){ //internet在线则获取sntp_UTC下发
 
-							timeStmap_temp = sntp_get_current_timestamp();
-							
-							datsTemp_zigbSysCtrl.command = ZIGB_SYSCMD_TIMESET;
-							datsTemp_zigbSysCtrl.dats[0] = (u8)((timeStmap_temp & 0x000000FF) >> 0); //时间�?
-							datsTemp_zigbSysCtrl.dats[1] = (u8)((timeStmap_temp & 0x0000FF00) >> 8);
-							datsTemp_zigbSysCtrl.dats[2] = (u8)((timeStmap_temp & 0x00FF0000) >> 16);
-							datsTemp_zigbSysCtrl.dats[3] = (u8)((timeStmap_temp & 0xFF000000) >> 24);
-							datsTemp_zigbSysCtrl.dats[4] = (u8)(sntp_get_timezone() + 11); //时区																
-							datsTemp_zigbSysCtrl.datsLen = 5;
+//							timeStmap_temp = sntp_get_current_timestamp();
+//							
+//						}else{ //否则直接取本地UTC
 
-							nodeCMDtranslate_EN = true;
-							
-						}else{
+//							timeStmap_temp = systemUTC_current;
+//						}
 
-							nodeCMDtranslate_EN = false;
-						}
+						timeStmap_temp = systemUTC_current;
+						
+						datsTemp_zigbSysCtrl.command = ZIGB_SYSCMD_TIMESET;
+						datsTemp_zigbSysCtrl.dats[0] = (u8)((timeStmap_temp & 0x000000FF) >> 0); //UTC
+						datsTemp_zigbSysCtrl.dats[1] = (u8)((timeStmap_temp & 0x0000FF00) >> 8);
+						datsTemp_zigbSysCtrl.dats[2] = (u8)((timeStmap_temp & 0x00FF0000) >> 16);
+						datsTemp_zigbSysCtrl.dats[3] = (u8)((timeStmap_temp & 0xFF000000) >> 24);
+						datsTemp_zigbSysCtrl.dats[4] = (u8)(sysTimeZone_H); //时区_时
+						datsTemp_zigbSysCtrl.dats[5] = (u8)(sysTimeZone_M); //时区_分
+						datsTemp_zigbSysCtrl.dats[6] = 0; //后期调整为下发时区，但不作时区补偿
+						datsTemp_zigbSysCtrl.datsLen = 6;
+						
+						nodeCMDtranslate_EN = true;
 					
 					}break;
 
@@ -1472,16 +1529,46 @@ zigbeeDataTransProcess_task(void *pvParameters){
 						
 					}break;
 
-					case msgFun_portCtrlEachoRegister:{
+					case msgFun_portCtrlEachoRegister:{ //立即注册互控端口
 
 						bool result_Set = zigb_clusterCtrlEachotherCfg();
 						nodeCMDtranslate_EN = false;
 					
 					}break;
 
-					case msgFun_panidRealesNwkCreat:{
+					case msgFun_panidRealesNwkCreat:{ //PANID网络立即更新
 
 						ZigB_PANIDReales(false);
+						nodeCMDtranslate_EN = false;
+					
+					}break;
+
+					case msgFun_scenarioCrtl:{ //场景控制即刻群发
+
+						u8 loop = 0;
+						u8 datsSend_temp[1] = {0};
+
+						for(loop = 0; loop < scenarioOprateDats.devNode_num; loop ++){
+
+							nwkStateAttr_Zigb *infoZigbDevRet_temp = zigbDev_eptPutout_BYpsy(zigbDevList_Head, 
+																							 scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC, 
+																							 DEVZIGB_DEFAULT, 
+																							 false);
+							if(infoZigbDevRet_temp){ //网络短地址获取
+
+								datsSend_temp[0] = scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus; //数据发送
+								ZigB_remoteDatsSend( infoZigbDevRet_temp->nwkAddr,
+                                  					 datsSend_temp,
+													 1,
+													 ZIGB_ENDPOINT_CTRLSECENARIO);
+								vTaskDelay(1);
+
+								os_free(infoZigbDevRet_temp);
+							}
+						}
+						
+						memset(&scenarioOprateDats, 0, sizeof(stt_scenarioOprateDats));  //数据复位
+
 						nodeCMDtranslate_EN = false;
 					
 					}break;
@@ -1519,7 +1606,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 				u8 datsTemp_zigbCtrlEachother[1] = {0};
 				u8 datsTempLen_zigbCtrlEachother = 1; //互控数据仅一字节
 				
-				for(loop = 0; loop < 3; loop ++){ //三个开关位分别判定
+				for(loop = 0; loop < USRCLUSTERNUM_CTRLEACHOTHER; loop ++){ //三个开关位分别判定
 				
 					if(EACHCTRL_realesFLG & (1 << loop)){ //互控有效位判断
 					
@@ -1545,7 +1632,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 			xMsgQ_rcvResult = xQueueReceive(xMsgQ_timeStampGet, (void *)&rptr_timeStamp, 0);
 			if(xMsgQ_rcvResult == pdTRUE){
 	
-				if(rptr_timeStamp)zigB_sysTimeSet(rptr_timeStamp - 946713600UL); //zigbee时间戳从unix纪元946656000<2000/01/01 00:00:00>开始
+				if(rptr_timeStamp)zigB_sysTimeSet(rptr_timeStamp - ZIGB_UTCTIME_START); //zigbee UTC 负补偿
 	
 	//			if(rptr_timeStamp == zigB_sysTimeGet())os_printf("time right.\n");
 	
@@ -1644,28 +1731,28 @@ zigbeeDataTransProcess_task(void *pvParameters){
 								
 									case ZIGB_FRAMEHEAD_CTRLLOCAL:{
 			
-										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[5]), DEVMAC_LEN);	//数据包下�?-9为MAC地址,MAC前一位为校验�?
+										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[5]), DEVMAC_LEN);	//数据包下标5-9为MAC地址,MAC前一位为校验码
 										datsFrom_obj = datsFrom_ctrlLocal;
 									
 									}break;
 									
 									case ZIGB_FRAMEHEAD_CTRLREMOTE:{
 								
-										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[17]), DEVMAC_LEN); //数据包下�?7-21为MAC地址,MAC前一位为校验�?
+										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[17]), DEVMAC_LEN); //数据包下标17-21为MAC地址,MAC前一位为校验码
 										datsFrom_obj = datsFrom_ctrlRemote;
 									
 									}break;
 								
 									case ZIGB_FRAMEHEAD_HEARTBEAT:{
 								
-										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[3 + 1]), DEVMAC_LEN);	//数据包下�?-8为MAC地址,MAC前一位为校验�?
+										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[3 + 1]), DEVMAC_LEN);	//数据包下标4-8为MAC地址,MAC前一位为校验码
 										datsFrom_obj = datsFrom_heartBtRemote;
 									
 									}break;
 								
 									default:{
 								
-										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[5]), DEVMAC_LEN);	//数据包下�?-9为MAC地址,MAC前一位为校验�?
+										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[5]), DEVMAC_LEN);	//数据包下标5-9为MAC地址,MAC前一位为校验码
 										datsFrom_obj = datsFrom_ctrlLocal;
 										
 									}break;
@@ -1698,9 +1785,9 @@ zigbeeDataTransProcess_task(void *pvParameters){
 									
 								}else{
 								
-									ZigbDevNew_temp->onlineDectect_LCount = zigDev_lifeCycle;
+									ZigbDevNew_temp->onlineDectect_LCount = zigDev_lifeCycle; //更新节点设备在列表中的生命周期
 									ZigbDevNew_temp = NULL;
-									os_free(ZigbDevNew_temp); //缓存释放
+									if(ZigbDevNew_temp)os_free(ZigbDevNew_temp); //缓存释放
 								}
 			
 								/*数据处理-数据通过消息队列传送至socket通信主线程*/
@@ -1748,6 +1835,8 @@ zigbeeDataTransProcess_task(void *pvParameters){
 										swCommand_fromUsr.objRelay = statusRelay_temp | local_datsRX->datsSTT.stt_MSG.dats[0] << 2; //bit2 开关动作位 动作响应
 									}
 								}
+
+								devStatus_pushIF = true; //开关状态数据推送
 							
 							}break;
 						}

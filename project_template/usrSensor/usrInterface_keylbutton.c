@@ -3,6 +3,8 @@
 #include "esp_common.h"
 #include "espressif/espconn.h"
 #include "espressif/airkiss.h"
+#include "espressif/esp_softap.h"
+#include "espressif/esp_wifi.h"
 
 #include "GPIO.h"
 
@@ -16,11 +18,17 @@
 #include "hwPeripherial_Actuator.h"
 #include "datsManage.h"
 #include "devUpgrade_OTA.h"
+#include "usrInterface_Tips.h"
 
 extern xQueueHandle xMsgQ_zigbFunRemind;
 extern xQueueHandle xMsgQ_devUpgrade;
 
+extern void somartConfig_complete(void);
+
 u8 val_DcodeCfm = 0; //²¦ÂëÈ·ÈÏÖµ
+
+u8 timeCounter_smartConfig_start = 0; //smartconfig¿ªÆôÊ±¼ä¼ÆÊ±£¨¿ªÆôÊ±¼ä¹ý³¤Ó°ÏìÆäËû¶¨Ê±Æ÷ÔËÐÐ£¬±ØÐëÓÐÏÞÖÆ£©
+bool smartconfigOpen_flg = false; //smartconfig¿ªÆô±êÖ¾
 
 u16	touchPadActCounter 	= 0;  //°´ÏÂÊ±¼ä¼ÆÊ±¼ÆÊýÖµ£¨´¥Ãþ°´¼ü£©
 u16	touchPadContinueCnt	= 0;  //Á¬°´¼ä¸ô¼ÆÊ±¼ÆÊýÖµ£¨´¥Ãþ°´¼ü£©
@@ -29,15 +37,15 @@ bool usrKeyCount_EN	= false;  //°´ÏÂÊ±¼ä¼ÆÊ±¼ÆÊýÖµ£¨Çá´¥°´¼ü£©
 u16	 usrKeyCount	= 0;  //°´ÏÂÊ±¼ä¼ÆÊ±Ê¹ÄÜ£¨Çá´¥°´¼ü£©
 
 LOCAL xTaskHandle pxTaskHandle_threadUsrInterface;
+
+LOCAL void usrSmartconfig_start(void);
 /*---------------------------------------------------------------------------------------------*/
 
 LOCAL void ICACHE_FLASH_ATTR
 usrFunCB_pressShort(void){
 
 	os_printf("usrKey_short.\n");
-	
-	wifi_set_opmode(STATION_MODE);	//ÉèÖÃÎªSTATIONÄ£Ê½
-	smartconfig_start(smartconfig_done_tp, 0);	//¿ªÊ¼smartlink	 
+
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -45,8 +53,14 @@ usrFunCB_pressLongA(void){
 
 	os_printf("usrKey_Long_A.\n");
 
-	enum_zigbFunMsg mptr_zigbFunRm = msgFun_nwkOpen;
-	xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
+	if(WIFIMODE_STA == wifi_get_opmode()){
+
+		usrSmartconfig_start();
+		
+	}else{
+
+		
+	}
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -57,6 +71,64 @@ usrFunCB_pressLongB(void){
 	u8 mptr_upgrade = DEVUPGRADE_PUSH;
 //	mptr_upgrade = 0;
 	xQueueSend(xMsgQ_devUpgrade, (void *)&mptr_upgrade, 0); 	
+}
+
+LOCAL void ICACHE_FLASH_ATTR
+usrSoftAP_Config(void){
+
+	struct softap_config usrAP_config = {0};
+
+	sprintf(usrAP_config.ssid, "Lanbon-H7_Mster%02X%02X", MACSTA_ID[4], MACSTA_ID[5]);
+	sprintf(usrAP_config.password, "lanbon123456");
+	usrAP_config.authmode = AUTH_WPA_WPA2_PSK;
+	usrAP_config.ssid_len = 0;
+	usrAP_config.channel = 6;
+	usrAP_config.ssid_hidden = 0;
+	usrAP_config.beacon_interval = 200;
+	usrAP_config.max_connection = 3;
+
+	wifi_set_opmode(SOFTAP_MODE);
+	wifi_softap_set_config(&usrAP_config);
+}
+
+void ICACHE_FLASH_ATTR
+usrSmartconfig_stop(void){
+
+	if(smartconfigOpen_flg){
+
+		smartconfigOpen_flg = false; //±êÖ¾¸´Î»
+		if(timeCounter_smartConfig_start)timeCounter_smartConfig_start = 0;
+		if(devTips_status == status_tipsAPFind)tips_statusChangeToNormal(); //tips´ÓÅäÖÃÄ£Ê½»Ö¸´ÖÁÕý³£Ä£Ê½
+		
+		smartconfig_stop();
+		somartConfig_complete(); //¶¨Ê±Æ÷»Ö¸´
+
+		os_printf("smartconfig stop.\n");
+	}
+}
+
+void ICACHE_FLASH_ATTR
+usrSmartconfig_start(void){
+
+	os_printf("smartconfig start!!!.\n");
+
+	tips_statusChangeToAPFind(); //tips¸ü±ä
+
+	wifi_set_opmode(STATION_MODE);	//ÉèÖÃÎªSTATIONÄ£Ê½
+	smartconfig_start(smartconfig_done_tp, 0);	//¿ªÊ¼smartlink
+	
+	timeCounter_smartConfig_start = SMARTCONFIG_TIMEOPEN_DEFULT;
+	smartconfigOpen_flg = true;
+}
+
+void ICACHE_FLASH_ATTR
+usrZigbNwkOpen_start(void){
+
+	enum_zigbFunMsg mptr_zigbFunRm = msgFun_nwkOpen;
+	xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
+	tips_statusChangeToZigbNwkOpen(ZIGBNWKOPENTIME_DEFAULT);
+
+	os_printf("zigbNwk open start!!!.\n");
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -77,6 +149,7 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 					swCommand_fromUsr.actMethod = relay_flip;
 					swCommand_fromUsr.objRelay = statusPad;
 					EACHCTRL_realesFLG = statusPad; //·ÇÁ¬°´¶Ì°´´¥·¢»¥¿Ø
+					devStatus_pushIF = true; //¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
 					
 				}break;
 					
@@ -149,6 +222,7 @@ LOCAL void ICACHE_FLASH_ATTR
 touchPad_functionTrigContinue(u8 statusPad, u8 loopCount){	//ÆÕÍ¨´¥Ãþ°´¼üÁ¬°´´¥·¢
 	
 	EACHCTRL_realesFLG = statusPad; //Á¬°´½áÊøºó´¥·¢»¥¿Ø
+	devStatus_pushIF = true; //Á¬°´½áÊøºó´¥·¢¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
 
 	os_printf("touchCnt over:%02X, %02dtime.\n", statusPad, loopCount);
 
@@ -163,8 +237,9 @@ touchPad_functionTrigContinue(u8 statusPad, u8 loopCount){	//ÆÕÍ¨´¥Ãþ°´¼üÁ¬°´´¥·
 				}break;
 				
 				case 4:{
+
+					usrZigbNwkOpen_start();
 				
-					
 				}break;
 					
 				default:{}break;
@@ -281,11 +356,11 @@ DcodeScan(void){
 		
 			if(val_Dcode_Local & Dcode_FLG_ifAP){
 			
-				
+				usrSoftAP_Config();
 			
 			}else{
 			
-				
+				wifi_set_opmode(STATION_MODE);
 			}
 		}
 		

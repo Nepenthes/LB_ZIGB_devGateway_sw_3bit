@@ -7,6 +7,10 @@
 
 #include "spi_interface.h"
 
+#include "usrInterface_keylbutton.h"
+#include "usrInterface_Tips.h"
+#include "timer_Activing.h"
+
 stt_HC597_datsIn	usrDats_sensor;
 stt_HC595_datsOut 	usrDats_actuator = {
 
@@ -168,6 +172,56 @@ timerFunCB_hw595and597datsReales(void *para){
 	usrDats_sensor.usrKeyIn_rly_0 	= (datsIn_temp & 0x01) >> 0;
 
 	P_rlyTips_reales ++;
+
+	{ //1ms计时专用 //不可被smartconfig打断
+
+		const u16 period_1ms = 10;
+		static u16 counter_1ms = 0;
+
+		if(counter_1ms < period_1ms)counter_1ms ++;
+		else{
+
+			counter_1ms = 0;
+
+			//触摸按键计时业务逻辑
+			if(touchPadActCounter)touchPadActCounter --; //按下时间
+			if(touchPadContinueCnt)touchPadContinueCnt --; //连按间隔时间
+			
+			//轻触按键计时业务逻辑
+			if(usrKeyCount_EN)usrKeyCount ++;
+			else usrKeyCount = 0;
+
+			//tips动作周期计时计数专用
+			if(counter_tipsAct)counter_tipsAct --;
+		}
+	}
+
+	{ //1s计时专用 //不可被smartconfig打断
+
+		const u16 period_1second = 10000;
+		static u16 counter_1second = 0;
+
+		if(counter_1second < period_1second)counter_1second ++;
+		else{
+
+			counter_1second = 0;
+
+			/*本地UTC每秒自增更新*/
+			systemUTC_current ++;
+			//系统本地时间维持更新
+			sysTimeKeep_counter ++;
+
+			/*smartconfig开启时间计时*/
+			if(smartconfigOpen_flg){
+			
+				if(timeCounter_smartConfig_start)timeCounter_smartConfig_start --; //倒计时
+				else{
+
+					usrSmartconfig_stop(); //smartconfig尝试关闭
+				}
+			}
+		}
+	}
 }
 
 #else
@@ -356,7 +410,55 @@ timerFunCB_hw595and597datsReales(void *para){
 
 	P_rlyTips_reales ++;
 
-	
+	{ //1ms计时专用 //不可被smartconfig打断
+
+		const u16 period_1ms = 10;
+		static u16 counter_1ms = 0;
+
+		if(counter_1ms < period_1ms)counter_1ms ++;
+		else{
+
+			counter_1ms = 0;
+
+			//触摸按键计时业务逻辑
+			if(touchPadActCounter)touchPadActCounter --; //按下时间
+			if(touchPadContinueCnt)touchPadContinueCnt --; //连按间隔时间
+			
+			//轻触按键计时业务逻辑
+			if(usrKeyCount_EN)usrKeyCount ++;
+			else usrKeyCount = 0;
+
+			//tips动作周期计时计数专用
+			if(counter_tipsAct)counter_tipsAct --;
+		}
+	}
+
+	{ //1s计时专用 //不可被smartconfig打断
+
+		const u16 period_1second = 10000;
+		static u16 counter_1second = 0;
+
+		if(counter_1second < period_1second)counter_1second ++;
+		else{
+
+			counter_1second = 0;
+
+			/*本地UTC每秒自增更新*/
+			systemUTC_current ++;
+			//系统本地时间维持更新
+			sysTimeKeep_counter ++;
+
+			/*smartconfig开启时间计时*/
+			if(smartconfigOpen_flg){
+			
+				if(timeCounter_smartConfig_start)timeCounter_smartConfig_start --; //倒计时
+				else{
+
+					usrSmartconfig_stop(); //smartconfig尝试关闭
+				}
+			}
+		}
+	}
 }
 
 #endif
