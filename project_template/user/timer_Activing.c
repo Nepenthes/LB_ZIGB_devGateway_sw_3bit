@@ -64,7 +64,7 @@ LOCAL void ICACHE_FLASH_ATTR
 timerFunCB_sntpTimerAct(void *para){
 
 	static u8 timeLog_Cnt = 0;
-	const  u8 timeLog_Period = 3;
+	const  u8 timeLog_Period = 3; //zigbee从网络时间校准周期，单位：s
 	u32_t timeStmap_temp = 0UL;
 
 	if(timeLog_Cnt < timeLog_Period)timeLog_Cnt ++;
@@ -218,12 +218,13 @@ datsDelayOP_getReales(void){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-
 LOCAL void ICACHE_FLASH_ATTR
 timActingProcess_task(void *pvParameters){
 
 	stt_usrDats_privateSave datsSave_Temp = {0};
 	stt_usrDats_privateSave *datsRead_Temp;
+
+	bool timeUp_actionDone_flg = false; //同一分钟内定时器响应动作完成标志<同一分钟内只响应一次定时动作>
 
 	u8 loop = 0;
 
@@ -302,10 +303,19 @@ timActingProcess_task(void *pvParameters){
 				if(true == weekend_judge(systemTime_current.time_Week, timDatsTemp_CalibrateTab[loop].Week_Num)){ //周占位对比
 				
 					if(timCount_ENABLE == timDatsTemp_CalibrateTab[loop].if_Timing){ //定时开启标志核对
+
+						if(((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) !=	\
+						   ((u16)timDatsTemp_CalibrateTab[loop].Hour * 60 + (u16)timDatsTemp_CalibrateTab[loop].Minute) && //定时时刻核对,不对则动作完成标志复位
+						   (timeUp_actionDone_flg)){
+
+							timeUp_actionDone_flg = false; //动作完成标志复位
+						}
 						
 						if(((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) ==	\
-						   ((u16)timDatsTemp_CalibrateTab[loop].Hour * 60 + (u16)timDatsTemp_CalibrateTab[loop].Minute) && //定时时刻核对，正确时刻前10s都是响应期
-						   ((u16)systemTime_current.time_Second <= 10)){  //
+						   ((u16)timDatsTemp_CalibrateTab[loop].Hour * 60 + (u16)timDatsTemp_CalibrateTab[loop].Minute) && //定时时刻核对,正确时刻整分钟都是响应期
+						   (!timeUp_actionDone_flg)){  //同一分钟仅响应一次定时器动作响应
+
+						   timeUp_actionDone_flg = true; //动作完成标志置位
 							   
 							//一次性定时判断
 							if(swTim_onShoot_FLAG & (1 << loop)){ //是否为一次性定时，是则清空当前段定时信息

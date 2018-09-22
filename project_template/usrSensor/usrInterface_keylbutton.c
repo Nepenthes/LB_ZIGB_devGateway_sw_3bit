@@ -74,6 +74,13 @@ usrFunCB_pressLongB(void){
 }
 
 LOCAL void ICACHE_FLASH_ATTR
+touchFunCB_sysGetRestart(void){
+
+	os_printf("system get restart right now! please wait.\n");
+	system_restart();
+}
+
+LOCAL void ICACHE_FLASH_ATTR
 usrSoftAP_Config(void){
 
 	struct softap_config usrAP_config = {0};
@@ -205,7 +212,8 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 				case 1:
 				case 2:
 				case 4:{
-					
+
+					touchFunCB_sysGetRestart();
 			
 				}break;
 					

@@ -9,9 +9,10 @@ status_ifSave relayStatus_ifSave = statusSave_disable;
 
 relay_Command swCommand_fromUsr	= {0, actionNull};
 
+bool devStatus_ctrlEachO_IF = false; //互控状态组播发送使能--为使异步信号同步
 u8 EACHCTRL_realesFLG = 0; //互控更新使能标志 标志（一位：bit0\二位：bit1\三位：bit2）
 
-bool devStatus_pushIF = false; //推送使能
+bool devStatus_pushIF = false; //推送使能-为使异步信号同步
 relayStatus_PUSH devActionPush_IF = {0}; //推送执行数据
 
 LOCAL xTaskHandle pxTaskHandle_threadRelayActing;
@@ -98,6 +99,7 @@ actuatorRelay_Act(relay_Command dats){
 	}
 	
 	if(status_actuatorRelay)delayCnt_closeLoop = 0; //继电器开则立即更新绿色模式计时
+	if(EACHCTRL_realesFLG)devStatus_ctrlEachO_IF = true; //若有互控触发，则此时开放互控信息发送使能（为了信号变量同步，若提前发送，继电器状态还没变就发送了）
 	
 	if(relayStatus_ifSave == statusSave_enable){ //状态记忆更新
 

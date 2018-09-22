@@ -143,7 +143,7 @@ dtasTX_loadBasic_CUSTOM(socketDataTrans_obj datsObj,
 LOCAL STATUS ICACHE_FLASH_ATTR
 sockets_datsSend(socket_OBJ sObj, u8 dats[], u16 datsLen){
 
-	if(internet_connFLG){
+	if(internet_connFLG || (SOFTAP_MODE == wifi_get_opmode())){
 
 		switch(sObj){
 		
@@ -472,7 +472,7 @@ socketsDataTransProcess_task(void *pvParameters){
 										if(rptr_socketDats.dats[14 + loop * 3] == 0x80){ /*一次性定时判断*///周占位为空，而定时器使能被打开，说明是一次性
 										
 											swTim_onShoot_FLAG 	|= (1 << loop); //一次性定时标志开启
-											rptr_socketDats.dats[14 + loop * 3] |= (1 << (rptr_socketDats.dats[31] - 1)); //强制进行周占位，执行完毕后清除
+											rptr_socketDats.dats[14 + loop * 3] |= (1 << (systemTime_current.time_Week - 1)); //强制进行周占位，执行完毕后清除
 										}
 									}
 

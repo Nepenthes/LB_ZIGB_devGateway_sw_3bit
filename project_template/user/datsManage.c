@@ -13,7 +13,7 @@ u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0, 0, 0}; //互控端口位
 
 u8 MACSTA_ID[DEV_MAC_LEN] = {0};
 u8 MACAP_ID[DEV_MAC_LEN] = {0};
-u8 MACDST_ID[DEV_MAC_LEN] = {0};
+u8 MACDST_ID[DEV_MAC_LEN] = {1,1,1,1,1,1}; //默认不为0即可
 
 bool deviceLock_flag = false; //设备锁标志
 
@@ -50,7 +50,7 @@ portCtrlEachOther_Reales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
 
-	memcpy(datsRead_Temp->port_ctrlEachother, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER);
+	memcpy(CTRLEATHER_PORT, datsRead_Temp->port_ctrlEachother, USRCLUSTERNUM_CTRLEACHOTHER);
 
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }

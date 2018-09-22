@@ -25,7 +25,8 @@ u16  nwkZigb_currentPANID = 0;
 u16	 sysZigb_random = 0x1234;
 
 xQueueHandle xMsgQ_Zigb2Socket; //zigbee到socket数据中转消息队列
-xQueueHandle xMsgQ_uartToutDats; //串口数据接收超时断帧数据队列
+xQueueHandle xMsgQ_uartToutDats_dataSysRespond; //串口数据接收超时断帧数据队列-协议栈或系统回复数据
+xQueueHandle xMsgQ_uartToutDats_dataRemoteComing; //串口数据接收超时断帧数据队列-远端数据
 xQueueHandle xMsgQ_timeStampGet; //网络时间戳获取消息队列
 xQueueHandle xMsgQ_zigbFunRemind; //zigb功能触发消息队列
 
@@ -41,15 +42,17 @@ LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_Z2S(void){
 
 	xMsgQ_Zigb2Socket = xQueueCreate(20, sizeof(stt_threadDatsPass));
-	if(0 == xMsgQ_Zigb2Socket)return OK;
-	else return FAIL;
+	if(0 == xMsgQ_Zigb2Socket)return FAIL;
+	else return OK;
 }
 
 LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_uartToutDatsRcv(void){
 
-	xMsgQ_uartToutDats = xQueueCreate(10, sizeof(uartToutDatsRcv));
-	if(0 == xMsgQ_uartToutDats)return OK;
+	xMsgQ_uartToutDats_dataSysRespond = xQueueCreate(10, sizeof(uartToutDatsRcv));
+	if(0 == xMsgQ_uartToutDats_dataSysRespond)return FAIL;
+	else xMsgQ_uartToutDats_dataRemoteComing = xQueueCreate(100, sizeof(uartToutDatsRcv));
+	if(0 == xMsgQ_uartToutDats_dataRemoteComing)return FAIL;
 	else return FAIL;
 }
 
@@ -57,16 +60,16 @@ LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_timeStampGet(void){
 
 	xMsgQ_timeStampGet = xQueueCreate(5, sizeof(u32_t));
-	if(0 == xMsgQ_timeStampGet)return OK;
-	else return FAIL;
+	if(0 == xMsgQ_timeStampGet)return FAIL;
+	else return OK;
 }
 
 LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_zigbFunRemind(void){
 
 	xMsgQ_zigbFunRemind = xQueueCreate(5, sizeof(enum_zigbFunMsg));
-	if(0 == xMsgQ_zigbFunRemind)return OK;
-	else return FAIL;
+	if(0 == xMsgQ_zigbFunRemind)return FAIL;
+	else return OK;
 }
 
 /*zigbee节点设备链表重复节点优化去重*/ 
@@ -330,7 +333,8 @@ myUart0datsTrans_intr_funCB(void *para){
 		if (UART_FRM_ERR_INT_ST == (uart_intr_status & UART_FRM_ERR_INT_ST)) {
 			//os_printf("FRM_ERR\r\n");
 			WRITE_PERI_REG(UART_INT_CLR(uart_no), UART_FRM_ERR_INT_CLR);
-		} else if (UART_RXFIFO_FULL_INT_ST == (uart_intr_status & UART_RXFIFO_FULL_INT_ST)) {
+		} 
+		else if (UART_RXFIFO_FULL_INT_ST == (uart_intr_status & UART_RXFIFO_FULL_INT_ST)) {
 			os_printf("full\r\n");
 			fifo_Num = (READ_PERI_REG(UART_STATUS(UART0)) >> UART_RXFIFO_CNT_S)&UART_RXFIFO_CNT;
 			buf_idx = 0;
@@ -341,24 +345,39 @@ myUart0datsTrans_intr_funCB(void *para){
 			}
 
 			WRITE_PERI_REG(UART_INT_CLR(UART0), UART_RXFIFO_FULL_INT_CLR);
-		} else if (UART_RXFIFO_TOUT_INT_ST == (uart_intr_status & UART_RXFIFO_TOUT_INT_ST)) {
+		} 
+		else if (UART_RXFIFO_TOUT_INT_ST == (uart_intr_status & UART_RXFIFO_TOUT_INT_ST)) {
 			os_printf("tout\r\n");
 			
 			fifo_Num = (READ_PERI_REG(UART_STATUS(UART0)) >> UART_RXFIFO_CNT_S)&UART_RXFIFO_CNT;
 			buf_idx = 0;
 
 			memset(uart0_rxTemp, 0, fifo_Num * sizeof(uint8));
-			while (buf_idx < fifo_Num) {
+			while (buf_idx < fifo_Num) { //取超时之前所接收到的数据
 				
 				uart0_rxTemp[buf_idx] = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
 //				uartTX_char(UART0, READ_PERI_REG(UART_FIFO(UART0)) & 0xFF);
 				buf_idx++;
 			}
 
-			uartToutDatsRcv mptr_uartDatsRcv;
-			memcpy(mptr_uartDatsRcv.dats, uart0_rxTemp, fifo_Num);
-			mptr_uartDatsRcv.datsLen = fifo_Num;
-			xQueueSend(xMsgQ_uartToutDats, (void *)&mptr_uartDatsRcv, ( portTickType ) 0);
+			{ //按条件填装队列
+
+				const u8 cmd_remoteDataComing[2] = {0x44, 0x81};
+				const u8 cmd_remoteNodeOnline[2] = {0x45, 0xCA};
+
+				uartToutDatsRcv mptr_uartDatsRcv;
+				memcpy(mptr_uartDatsRcv.dats, uart0_rxTemp, fifo_Num);
+				mptr_uartDatsRcv.datsLen = fifo_Num;
+
+				if(!memcmp(&uart0_rxTemp[2], cmd_remoteDataComing, 2) || !memcmp(&uart0_rxTemp[2], cmd_remoteNodeOnline, 2)){
+
+					xQueueSend(xMsgQ_uartToutDats_dataRemoteComing, (void *)&mptr_uartDatsRcv, ( portTickType ) 0);
+					
+				}else{ //除了与远端有关的数据 其他都是系统响应数据
+
+					xQueueSend(xMsgQ_uartToutDats_dataSysRespond, (void *)&mptr_uartDatsRcv, ( portTickType ) 0);
+				}
+			}
 
 //			printf_datsHtoA("[Tips_uart]:", uart0_rxTemp, fifo_Num);
 
@@ -366,7 +385,8 @@ myUart0datsTrans_intr_funCB(void *para){
 				uart_putDats(UART0, "hellow fy\n", 10);
 
 			WRITE_PERI_REG(UART_INT_CLR(UART0), UART_RXFIFO_TOUT_INT_CLR);
-		} else if (UART_TXFIFO_EMPTY_INT_ST == (uart_intr_status & UART_TXFIFO_EMPTY_INT_ST)) {
+		} 
+		else if (UART_TXFIFO_EMPTY_INT_ST == (uart_intr_status & UART_TXFIFO_EMPTY_INT_ST)) {
 			os_printf("empty\n\r");
 			WRITE_PERI_REG(UART_INT_CLR(uart_no), UART_TXFIFO_EMPTY_INT_CLR);
 			CLEAR_PERI_REG_MASK(UART_INT_ENA(UART0), UART_TXFIFO_EMPTY_INT_ENA);
@@ -474,7 +494,7 @@ zigb_datsRequest(u8 frameREQ[],	//请求帧
 	while(datsRcv_tout --){
 
 		vTaskDelay(1);
-		xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
+		xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
 		while(xMsgQ_rcvResult == pdTRUE){
 			
 			if((rptr_uartDatsRcv.dats[0] == ZIGB_FRAME_HEAD) &&
@@ -487,7 +507,7 @@ zigb_datsRequest(u8 frameREQ[],	//请求帧
 					datsRX->frameRespLen = rptr_uartDatsRcv.datsLen;
 					return true;
 			}
-			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
+			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
 		}
 	}
 
@@ -525,7 +545,7 @@ zigb_VALIDA_INPUT(uint8 REQ_CMD[2],			//指令
 		while(datsRcv_tout --){
 
 			vTaskDelay(1);
-			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats, (void *)&rptr_uartDatsRcv, (portTickType) 0);
+			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv, (portTickType) 0);
 			while(xMsgQ_rcvResult == pdTRUE){	//遍历响应队列查找
 			
 				if(usr_memmem(rptr_uartDatsRcv.dats, rptr_uartDatsRcv.datsLen, ANSR_frame, ANSRdatsLen)){
@@ -533,7 +553,7 @@ zigb_VALIDA_INPUT(uint8 REQ_CMD[2],			//指令
 					result_REQ = true;
 					break;
 				}
-				xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
+				xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
 			}if(true == result_REQ)break;
 		}if(true == result_REQ)break;
 	}
@@ -804,7 +824,7 @@ ZigB_resetInit(void){
 		while(timeWait --){
 
 			vTaskDelay(1);
-			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats, (void *)&rptr_uartDatsRcv,  (portTickType) 0);
+			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv,  (portTickType) 0);
 			while(xMsgQ_rcvResult == pdTRUE){
 
 				if(!memcmp(rptr_uartDatsRcv.dats, initCmp_Frame, 11)){
@@ -812,7 +832,7 @@ ZigB_resetInit(void){
 					result_Init = true;
 					break;
 				}
-				xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats, (void *)&rptr_uartDatsRcv,  (portTickType) 0);
+				xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv,  (portTickType) 0);
 			}if(result_Init == true)break;
 		}if(result_Init == true)break;
 	}
@@ -1112,7 +1132,7 @@ ZigB_NwkCreat(uint16_t PANID, uint8_t CHANNELS){
 
 /*zigbee数据接收*/
 LOCAL bool ICACHE_FLASH_ATTR
-ZigB_datsRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
+ZigB_datsRemoteRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 	
 #define zigbcmdRX_Len 2
 	const u8 cmdRX[zigbcmdRX_Len][2] = {
@@ -1129,7 +1149,7 @@ ZigB_datsRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 
 	datsRX->datsType = zigbTP_NULL;
 
-	xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats, (void *)&rptr_uartDatsRcv,  (portTickType)timeWait);
+	xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataRemoteComing, (void *)&rptr_uartDatsRcv,  (portTickType)timeWait);
 	if(xMsgQ_rcvResult == pdTRUE){
 	
 		for(loop = 0;loop < zigbcmdRX_Len;loop ++){
@@ -1376,7 +1396,7 @@ ZigB_datsTX(uint16 		DstAddr,
 	/*条件选择，远端（即接收端）响应确认*/
 	if(true == responseIF){
 	
-		if(TXCMP_FLG && ZigB_datsRX(local_datsRX, 100)){	/**注意调试合适响应时间**/
+		if(TXCMP_FLG && ZigB_datsRemoteRX(local_datsRX, 100)){	/**注意调试合适响应时间**/
 		
 			if(local_datsRX->datsSTT.stt_MSG.Addr_from == DstAddr && !memcmp(local_datsRX->datsSTT.stt_MSG.dats,ASR_datsDst,zigbTX_ASR_datsDstLen)){
 			
@@ -1605,24 +1625,29 @@ zigbeeDataTransProcess_task(void *pvParameters){
 				bool TXCMP_FLG = false;
 				u8 datsTemp_zigbCtrlEachother[1] = {0};
 				u8 datsTempLen_zigbCtrlEachother = 1; //互控数据仅一字节
-				
-				for(loop = 0; loop < USRCLUSTERNUM_CTRLEACHOTHER; loop ++){ //三个开关位分别判定
-				
-					if(EACHCTRL_realesFLG & (1 << loop)){ //互控有效位判断
+
+				if(devStatus_ctrlEachO_IF == true){ //互控同步信息发送使能
+
+					devStatus_ctrlEachO_IF = false;
+
+					for(loop = 0; loop < USRCLUSTERNUM_CTRLEACHOTHER; loop ++){ //三个开关位分别判定
 					
-						EACHCTRL_realesFLG &= ~(1 << loop); //互控有效位清零
+						if(EACHCTRL_realesFLG & (1 << loop)){ //互控有效位判断
 						
-						datsTemp_zigbCtrlEachother[0] = (status_actuatorRelay >> loop) & 0x01; //有效位开关状态填装
-						
-						if((CTRLEATHER_PORT[loop] > 0x10) && CTRLEATHER_PORT[loop] < 0xFF){ //判定是否为有效互控端口
-						
-							TXCMP_FLG = ZigB_datsTX(0xFFFF, 
-													CTRLEATHER_PORT[loop],
-													CTRLEATHER_PORT[loop],
-													ZIGB_CLUSTER_DEFAULT_CULSTERID,
-													(u8 *)datsTemp_zigbCtrlEachother,
-													datsTempLen_zigbCtrlEachother,
-													false);
+							EACHCTRL_realesFLG &= ~(1 << loop); //互控有效位清零
+							
+							datsTemp_zigbCtrlEachother[0] = (status_actuatorRelay >> loop) & 0x01; //有效位开关状态填装
+							
+							if((CTRLEATHER_PORT[loop] > 0x10) && CTRLEATHER_PORT[loop] < 0xFF){ //判定是否为有效互控端口
+							
+								TXCMP_FLG = ZigB_datsTX(0xFFFF, 
+														CTRLEATHER_PORT[loop],
+														CTRLEATHER_PORT[loop],
+														ZIGB_CLUSTER_DEFAULT_CULSTERID,
+														(u8 *)datsTemp_zigbCtrlEachother,
+														datsTempLen_zigbCtrlEachother,
+														false);
+							}
 						}
 					}
 				}
@@ -1702,7 +1727,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 			}
 	
 			/*>>>>>>zigbee数据处理<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
-			if(true == ZigB_datsRX(local_datsRX, 1)){
+			if(true == ZigB_datsRemoteRX(local_datsRX, 1)){
 	
 				memset(disp, 0, zigB_mThread_dispLen * sizeof(char));
 				memset(dats_MSG, 0, zigB_mThread_datsMSG_Len * sizeof(char));

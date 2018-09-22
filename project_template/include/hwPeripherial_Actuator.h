@@ -40,6 +40,7 @@ typedef struct{
 extern u8 status_actuatorRelay;
 extern status_ifSave relayStatus_ifSave;
 extern relay_Command swCommand_fromUsr;
+extern bool devStatus_ctrlEachO_IF;
 extern u8 EACHCTRL_realesFLG;
 extern bool devStatus_pushIF;
 extern relayStatus_PUSH devActionPush_IF;

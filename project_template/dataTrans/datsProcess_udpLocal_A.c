@@ -153,7 +153,7 @@ UDPlocalA_datsSend(u8 dats[], u16 datsLen){
 void ICACHE_FLASH_ATTR
 mySocketUDPlocal_A_buildInit(void){
 
-	ssdp_udp_local_A.local_port = 8866; 			//建立本地udp链接
+	ssdp_udp_local_A.local_port = 8866; //建立本地udp链接
 	infoTemp_connUDP_local_A.type = ESPCONN_UDP;
 	
 	infoTemp_connUDP_local_A.proto.udp = &(ssdp_udp_local_A);

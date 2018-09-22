@@ -183,6 +183,7 @@ devConnectAP_autoInit(char P_ssid[32], char P_password[64]){
 	os_printf("AP connect result is %d.\n", wifi_station_connect());
 }
 
+/*测试线程*/
 void ICACHE_FLASH_ATTR
 myProcess_task(void *pvParameters)
 {
@@ -430,7 +431,7 @@ timerFunCB_usrReference(void *para){
 	const u8 period_nodeSystimeSynchronous = 5; //子节点系统时间同步周期 单位：s
 	static u8 counter_nodeSystimeSynchronous = 0;
 
-	const u8 period_localSystimeZigbAdjust = 20; //子节点系统时间同步周期 单位：s
+	const u8 period_localSystimeZigbAdjust = 20; //本地系统时间同步周期 单位：s
 	static u8 counter_localSystimeZigbAdjust = 0;
 
 	u8 loop = 0;
