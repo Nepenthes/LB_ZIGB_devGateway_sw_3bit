@@ -89,5 +89,6 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/freertos/queue.h \
  ../include/datsProcess_socketsNetwork.h ../include/bsp_Hardware.h \
  ../include/hwPeripherial_Actuator.h ../include/bsp_Hardware.h \
- ../include/datsManage.h ../include/datsManage.h \
- ../include/devUpgrade_OTA.h ../include/usrInterface_Tips.h
+ ../include/datsManage.h ../include/datsProcess_uartZigbee.h \
+ ../include/datsManage.h ../include/devUpgrade_OTA.h \
+ ../include/usrInterface_Tips.h

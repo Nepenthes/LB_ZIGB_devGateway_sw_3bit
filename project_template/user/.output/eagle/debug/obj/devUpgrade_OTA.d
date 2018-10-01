@@ -89,4 +89,5 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/espconn.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/airkiss.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/upgrade.h \
- ../include/datsManage.h ../include/datsManage.h
+ ../include/datsManage.h ../include/datsProcess_uartZigbee.h \
+ ../include/datsManage.h

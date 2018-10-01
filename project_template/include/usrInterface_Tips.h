@@ -3,7 +3,12 @@
 
 #include "esp_common.h"
 
-#define TIPS_SWFREELOOP_TIME	10 //用户操作释放时长周期定义 单位：s
+#define TIPS_SWFREELOOP_TIME	60 //用户操作释放时长周期定义 单位：s
+
+#define DEFULAT_COLORTAB_NUM	10 //色值表数目
+
+#define TIPSBKCOLOR_DEFAULT_ON	8  //默认开关触摸背景色：开启
+#define TIPSBKCOLOR_DEFAULT_OFF 5  //默认开关触摸背景色：关闭
 
 typedef enum{
 
@@ -26,6 +31,20 @@ typedef enum{
 	devNwkStaute_wifiNwkFind, //wifi smartConfig中
 }tips_devNwkStatus;
 
+typedef struct{
+
+	u8 tips_Period:3;
+	u8 tips_time;
+	u8 tips_loop:5;
+}sound_Attr;
+
+typedef enum beepsMode{
+
+	beepsMode_null = 0,
+	beepsMode_standBy,
+	beepsWorking,
+	beepsComplete,
+}enum_beeps;
 
 extern u8 counter_tipsAct;
 extern u8 counter_ifTipsFree;
@@ -35,8 +54,12 @@ extern u8 timeCount_zigNwkOpen;
 extern tips_Status devTips_status;
 extern tips_devNwkStatus devNwkTips_status;
 
+extern enum_beeps dev_statusBeeps;
+extern sound_Attr devTips_beep;
+
 void ledBKGColorSw_Reales(void);
 
+void beeps_usrActive(u8 tons, u8 time, u8 loop);
 void tips_statusChangeToNormal(void);
 void tips_statusChangeToAPFind(void);
 void tips_statusChangeToZigbNwkOpen(u8 timeopen);

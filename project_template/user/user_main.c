@@ -554,6 +554,8 @@ void user_init(void)
 	smartconfig_stop();
 
 	wifi_set_opmode(STATION_MODE);
+
+	devFactoryRecord_Opreat(); //出厂判断
 	
 	devMAC_Reales(); //MAC更新
 	ledBKGColorSw_Reales(); //背景灯色索引更新
@@ -583,13 +585,13 @@ void user_init(void)
 	/*Sockets建立不能进行二次封装，否则影响smartlink功能，导致重启*/
 	mySocketUDPlocal_A_buildInit();	//Socket建立_本地UDP_A
 	mySocketUDPremote_B_buildInit((u8 *)serverRemote_IP_Lanbon);//Socket建立_远端服务器UDP_B
-	tcpRemote_A_connectStart();	//Socket建立_远端TCP_A
-	tcpRemote_B_connectStart();	//Socket建立_远端TCP_B
+//	tcpRemote_A_connectStart();	//Socket建立_远端TCP_A
+//	tcpRemote_B_connectStart();	//Socket建立_远端TCP_B
 
-	tipsLED_rgbColorSet(3, 1, 0, 6);
-	tipsLED_rgbColorSet(2, 10, 0, 0);
-	tipsLED_rgbColorSet(1, 0, 10, 0);
-	tipsLED_rgbColorSet(0, 0, 0, 10);
+	tipsLED_rgbColorSet(3,	1, 	0, 	6);
+	tipsLED_rgbColorSet(2, 10, 	0, 	0);
+	tipsLED_rgbColorSet(1, 	0, 10, 	0);
+	tipsLED_rgbColorSet(0, 	0, 	0, 10);
 
 	os_timer_disarm(&timer_Test); //用户测试定时器
 	os_timer_setfn(&timer_Test, (os_timer_func_t *)timerFunCB_Test, NULL);

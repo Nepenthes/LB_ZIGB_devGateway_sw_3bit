@@ -4,12 +4,17 @@
 
 #include "spi_flash.h"
 
+#include "usrInterface_Tips.h"
+
 const u8 serverRemote_IP_Lanbon[4] = {47,52,5,108}; //47,52,5,108 香港 //112,124,61,191 中国
 
 stt_scenarioOprateDats scenarioOprateDats = {0};
 
 //u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0x1A, 0x1B, 0x1C}; //互控端口位
 u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0, 0, 0}; //互控端口位
+
+u8 COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT_NUMTAIL] = {0};
+stt_scenarioOprateDats COLONY_DATAMANAGE_SCENE = {0};
 
 u8 MACSTA_ID[DEV_MAC_LEN] = {0};
 u8 MACAP_ID[DEV_MAC_LEN] = {0};
@@ -213,12 +218,32 @@ devData_recoverFactory(void){
 
     //flash清空
 	stt_usrDats_privateSave dats_Temp = {0};
+	
 	spi_flash_erase_sector(DATS_LOCATION_START + 0);
 	spi_flash_write((DATS_LOCATION_START + 0) * SPI_FLASH_SEC_SIZE,
 				    (u32 *)&dats_Temp,
 				    sizeof(stt_usrDats_privateSave));
 
+	//默认值填装
+	dats_Temp.bkColor_swON = TIPSBKCOLOR_DEFAULT_ON;
+	dats_Temp.bkColor_swOFF = TIPSBKCOLOR_DEFAULT_OFF;
+	devParam_flashDataSave(obj_bkColor_swON, dats_Temp);
+	devParam_flashDataSave(obj_bkColor_swOFF, dats_Temp);
 }
+
+void ICACHE_FLASH_ATTR
+devFactoryRecord_Opreat(void){
+
+	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
+
+	if(datsRead_Temp->FLG_factory_IF){
+
+		devData_recoverFactory();
+	}
+
+	if(datsRead_Temp)os_free(datsRead_Temp);
+}
+
 
 
 

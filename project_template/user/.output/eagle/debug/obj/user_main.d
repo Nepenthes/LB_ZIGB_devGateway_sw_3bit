@@ -98,4 +98,4 @@
  ../include/usrInterface_keylbutton.h ../include/hwPeripherial_Actuator.h \
  ../include/bsp_Hardware.h ../include/usrInterface_Tips.h \
  ../include/devUpgrade_OTA.h ../include/datsManage.h \
- ../include/datsManage.h
+ ../include/datsProcess_uartZigbee.h ../include/datsManage.h

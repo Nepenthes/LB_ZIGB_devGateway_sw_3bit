@@ -76,6 +76,9 @@ myUDP_local_ACallback(void *arg, char *pdata, unsigned short len){
 								scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus = *(pdata + pointTemp + 5); //集群单位操作状态填装
 							}
 
+							memset(&COLONY_DATAMANAGE_SCENE, 0, sizeof(stt_scenarioOprateDats));
+							memcpy(&COLONY_DATAMANAGE_SCENE, &scenarioOprateDats, sizeof(stt_scenarioOprateDats)); //本地数据集中管理更新
+
 							mptr_socketDats.dstObj = obj_toWIFI;
 							mptr_socketDats.portObj = Obj_udpLocal_A;
 							mptr_socketDats.command = *(pdata + 3);

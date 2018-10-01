@@ -81,4 +81,4 @@
  ../include/timer_Activing.h ../include/bsp_Hardware.h \
  ../include/datsManage.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/freertos/queue.h \
- ../include/datsManage.h
+ ../include/datsProcess_uartZigbee.h ../include/datsManage.h

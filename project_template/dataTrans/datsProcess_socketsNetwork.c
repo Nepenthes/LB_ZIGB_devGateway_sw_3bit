@@ -294,6 +294,9 @@ socketsDataTransProcess_task(void *pvParameters){
 
 							repeatTX_buff[14] = (u8)(nwkZigb_currentPANID >> 8);
 							repeatTX_buff[15] = (u8)(nwkZigb_currentPANID >> 0);
+
+							repeatTX_buff[20] = 0x00;  //协调器网络短地址标记 <调试专用>
+							repeatTX_buff[21] = 0x00;  //协调器网络短地址标记 <调试专用>
 		
 							specialCMD_IF		= false;
 							socketRespond_IF	= true;
@@ -664,17 +667,17 @@ socketsDataTransProcess_task(void *pvParameters){
 								enum_zigbFunMsg mptr_zigbFunRm = msgFun_scenarioCrtl; //消息即刻转发至zigb线程进行场景集群控制下发
 								xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
 								
-								for(loop = 0; loop < scenarioOprateDats.devNode_num; loop ++){ //log打印
+//								for(loop = 0; loop < scenarioOprateDats.devNode_num; loop ++){ //log打印
 
-									os_printf("devNode<%02d>MAC:[%02X %02X %02X %02X %02X] --opStatus:{%02X}.\n",
-										      loop,
-										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[0],
-										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[1],
-										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[2],
-										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[3],
-										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[4],
-										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus);
-								}
+//									os_printf("devNode<%02d>MAC:[%02X %02X %02X %02X %02X] --opStatus:{%02X}.\n",
+//										      loop,
+//										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[0],
+//										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[1],
+//										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[2],
+//										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[3],
+//										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC[4],
+//										      scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus);
+//								}
 							}
 
 						}break;
@@ -851,7 +854,7 @@ socketsDataTransProcess_task(void *pvParameters){
 				/*常规数据中转*/
 				case conventional:{
 
-					os_printf("[Tips_NWK-ZBmsg]: msgRcv from zigb <len: %d>\n", rptr_Z2S.dats.dats_conv.datsLen);
+//					os_printf("[Tips_NWK-ZBmsg]: msgRcv from zigb <len: %d>\n", rptr_Z2S.dats.dats_conv.datsLen);
 
 					switch(rptr_Z2S.dats.dats_conv.datsFrom){
 

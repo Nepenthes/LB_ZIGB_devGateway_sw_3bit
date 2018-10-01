@@ -85,4 +85,5 @@
  ../include/datsProcess_tcpRemote_B.h ../include/datsProcess_uartZigbee.h \
  ../include/timer_Activing.h ../include/hwPeripherial_Actuator.h \
  ../include/bsp_Hardware.h ../include/usrParsingMethod.h \
- ../include/datsManage.h ../include/datsManage.h
+ ../include/datsManage.h ../include/datsProcess_uartZigbee.h \
+ ../include/datsManage.h

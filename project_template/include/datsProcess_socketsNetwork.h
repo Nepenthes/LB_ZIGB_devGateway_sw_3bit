@@ -8,7 +8,7 @@
 #define FRAME_HEAD_SERVER	0xCC
 #define FRAME_HEAD_HEARTB	0xAA
 
-#define SOCKET_HEARTBEAT_PERIOD				8000
+#define SOCKET_HEARTBEAT_PERIOD				8000	//主机心跳包周期 单位：ms
 
 #define dataTransLength_objLOCAL			33
 #define dataTransLength_objREMOTE			45

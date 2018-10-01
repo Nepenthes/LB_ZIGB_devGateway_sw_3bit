@@ -173,6 +173,75 @@ timerFunCB_hw595and597datsReales(void *para){
 
 	P_rlyTips_reales ++;
 
+	{ //蜂鸣器专用
+
+		static u8 period_beep = 3;		//beeps专用
+		static u8 count_beep  = 0;	
+
+		if(count_beep < period_beep)count_beep ++;
+		else{
+
+			static u16 	tips_Period = 20 * 50 / 2;
+			static u16 	tips_Count 	= 0;
+			static u8 	tips_Loop 	= 2 * 4;
+			static bool beeps_en 	= 1;
+
+			count_beep = 0;
+
+			switch(dev_statusBeeps){
+
+				case beepsMode_standBy:{
+					
+					period_beep = devTips_beep.tips_Period;
+					tips_Period = 20 * devTips_beep.tips_time / period_beep;
+					tips_Loop 	= 2 * devTips_beep.tips_loop;
+					tips_Count 	= 0;
+					beeps_en 	= 1;
+					dev_statusBeeps = beepsWorking;
+		
+				}break;
+				
+				case beepsWorking:{
+				
+					if(tips_Loop){
+					
+						if(tips_Count < tips_Period){
+						
+							tips_Count ++;
+							(beeps_en)?(TIPS_BEEP_SET(GPIO_INPUT_GET(GPIO_ID_PIN(GPIO_PIN_BEEP)))):(TIPS_BEEP_SET(1));
+							
+						}else{
+						
+							tips_Count = 0;
+							beeps_en = !beeps_en;
+							tips_Loop --;
+						}
+						
+					}else{
+					
+						dev_statusBeeps = beepsComplete;
+					}
+				
+				}break;
+				
+				case beepsComplete:{
+				
+					tips_Count = 0;
+					beeps_en = 1;
+					TIPS_BEEP_SET(1);
+					dev_statusBeeps = beepsMode_null;
+					
+				}break;
+			
+				default:{
+				
+					TIPS_BEEP_SET(1);
+					
+				}break;
+			}
+		}
+	}
+
 	{ //1ms计时专用 //不可被smartconfig打断
 
 		const u16 period_1ms = 10;
@@ -249,8 +318,8 @@ virtual_SPI595and597_gpioInit(void){
 	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTMS_U, FUNC_GPIO14);
 	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTMS_U);
 
-//	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
-//	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTDO_U);
+	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
+	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTDO_U);
 
 
 //	uint32 pwm_duty[3] = {TIPS_LEDRGB_DUTYUINT * 100, TIPS_LEDRGB_DUTYUINT * 100, TIPS_LEDRGB_DUTYUINT * 100};

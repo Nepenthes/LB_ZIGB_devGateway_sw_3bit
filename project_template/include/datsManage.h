@@ -4,8 +4,8 @@
 #include "esp_common.h"
 #include "freertos/queue.h"
 
+#include "datsProcess_uartZigbee.h"
 #include "datsManage.h"
-
 
 #define WIFIMODE_STA			1
 #define WIFIMODE_AP				2
@@ -13,14 +13,14 @@
 
 #define scenarioCtrlDats_LENGTH 1000 //场景控制数据包长度限制
 
-#define USRCLUSTERNUM_CTRLEACHOTHER			3 //互控端口数
+#define USRCLUSTERNUM_CTRLEACHOTHER		3 //互控端口数
 
-#define DEVZIGB_DEFAULT			0x33
+#define DEVZIGB_DEFAULT			0x33	//链表对应设备类型默认值
 
-#define DEV_SWITCH_TYPE			0xA3
+#define DEV_SWITCH_TYPE			0xA3	//开关设备类型默认值
 #define DEV_MAC_LEN				6
 
-#define SMARTCONFIG_TIMEOPEN_DEFULT		45 //smartconfig启动时间限制
+#define SMARTCONFIG_TIMEOPEN_DEFULT		180 //smartconfig启动时间限制 单位：s
 
 #define SWITCH_TYPE_SWBIT1	 	0x01 + 0xA0 //设备类型，一位开关
 #define SWITCH_TYPE_SWBIT2	 	0x02 + 0xA0 //设备类型，二位开关
@@ -37,16 +37,18 @@ typedef struct{
 
 	u8 devNode_MAC[5];
 	u8 devNode_opStatus;
-}scenarioOprate_Unit;
+}scenarioOprateUnit_Attr;
 
 typedef struct{
 
 	bool scenarioCtrlOprate_IF; //场景集群控制使能
-    scenarioOprate_Unit scenarioOprate_Unit[100]; //集群节点MAC
+    scenarioOprateUnit_Attr scenarioOprate_Unit[100]; //集群节点MAC
 	u8 devNode_num; //集群节点数目
 }stt_scenarioOprateDats;
 
 typedef struct{
+
+	u8  FLG_factory_IF;
 
 	u8 	rlyStaute_flg:3;	//三位继电器 状态
 
@@ -74,7 +76,9 @@ typedef struct{
 
 typedef enum{
 
-	obj_rlyStaute_flg = 0,
+	factory_record_IF = 0,
+
+	obj_rlyStaute_flg,
 	
 	obj_serverIP_default,
 
@@ -153,6 +157,9 @@ extern u8 MACSTA_ID[6];
 extern u8 MACAP_ID[6];
 extern u8 MACDST_ID[6];
 
+extern u8 COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT_NUMTAIL];
+extern stt_scenarioOprateDats COLONY_DATAMANAGE_SCENE;
+
 void smartconfig_done_tp(sc_status status, void *pdata);
 
 void portCtrlEachOther_Reales(void);
@@ -165,6 +172,7 @@ void printf_datsHtoA(const u8 *TipsHead, u8 *dats , u8 datsLen);
 stt_usrDats_privateSave *devParam_flashDataRead(void);	//谨记读取完毕后释放内存
 void devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSave_Temp);
 void devData_recoverFactory(void);
+void devFactoryRecord_Opreat(void);
 
 #endif
 

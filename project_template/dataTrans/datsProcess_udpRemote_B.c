@@ -30,6 +30,8 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 
 	if (pdata == NULL)return;
 
+//	os_printf("dataRemoteUDP rcv, num[%04d]<<<<.\n", len);
+
 //	espconn_get_connection_info(&infoTemp_connUDP_remote_B, &pcon_info, 0);
 //	memcpy(infoTemp_connUDP_remote_B.proto.udp->remote_ip, pcon_info->remote_ip, 4);
 //	infoTemp_connUDP_remote_B.proto.udp->remote_port = pcon_info->remote_port;
@@ -113,6 +115,8 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 
 			if(specialCMD_IF){ //一级非常规处理
 
+//				os_printf("scenarioCtl cmd rcv, dataLen:%04d bytes<<<<.\n", len);
+
 				switch(*(pdata + 3)){
 
 					case FRAME_MtoZIGBCMD_cmdCfg_scenarioCtl:{ //>>>场景控制<<<
@@ -133,6 +137,9 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 								scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus = *(pdata + pointTemp + 5); //集群单位操作状态填装
 							}
 
+							memset(&COLONY_DATAMANAGE_SCENE, 0, sizeof(stt_scenarioOprateDats));
+							memcpy(&COLONY_DATAMANAGE_SCENE, &scenarioOprateDats, sizeof(stt_scenarioOprateDats)); //本地数据集中管理更新
+
 							mptr_socketDats.dstObj = obj_toWIFI;
 							mptr_socketDats.portObj = Obj_udpRemote_B;
 							mptr_socketDats.command = *(pdata + 3);
@@ -140,6 +147,22 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 							mptr_socketDats.heartBeat_IF = false;	//不是心跳包
 							
 							xQueueSend(xMsgQ_datsFromSocketPort, (void *)&mptr_socketDats, 0);
+						}
+						else{ //打印错误分析
+
+							os_printf("scenarioCtl parsing fail, {frameDataLen:%04d<-->actualDataLen:%04d, frameTargetMAC:%02X %02X %02X %02X %02X, actualMAC:%02X %02X %02X %02X %02X}<<<<.\n", 
+									  (*(pdata + 1)) * 6 + 10,
+									  len,
+									  *(pdata + 4),
+									  *(pdata + 5),
+									  *(pdata + 6),
+									  *(pdata + 7),
+									  *(pdata + 8),
+									  MACSTA_ID[1],
+									  MACSTA_ID[2],
+									  MACSTA_ID[3],
+									  MACSTA_ID[4],
+									  MACSTA_ID[5]);
 						}
 						
 					}break;
@@ -162,7 +185,7 @@ void ICACHE_FLASH_ATTR
 UDPremoteB_datsSend(u8 dats[], u16 datsLen){
 
 	espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
-	os_printf("[Tips_socketUDP_B]: msg send ok!!!\n");
+//	os_printf("[Tips_socketUDP_B]: msg send ok!!!\n");
 }
 
 void ICACHE_FLASH_ATTR

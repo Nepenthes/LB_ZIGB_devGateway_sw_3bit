@@ -11,10 +11,16 @@
 #define WIFI_FRAME_HEAD		0x7F
 #define ZIGB_FRAME_HEAD		0xFE
 
-#define ZIGB_FRAMEHEAD_CTRLLOCAL		0xAA
-#define ZIGB_FRAMEHEAD_CTRLREMOTE		0xCC
-#define ZIGB_FRAMEHEAD_HEARTBEAT		0xAB
-#define ZIGB_OFFLINEFRAMEHEAD_HEARTBEAT	0xBB
+#define ZIGB_FRAMEHEAD_CTRLLOCAL		0xAA //常规控制帧头：本地
+#define ZIGB_FRAMEHEAD_CTRLREMOTE		0xCC //常规控制帧头：远程
+#define ZIGB_FRAMEHEAD_HEARTBEAT		0xAB //常规控制帧头：心跳<网关internet在线>
+#define ZIGB_OFFLINEFRAMEHEAD_HEARTBEAT	0xBB //常规控制帧头：心跳<网关internet离线>
+
+#define STATUSLOCALEACTRL_VALMASKRESERVE_ON		0x0A //互控轮询更新值，开关状态操作掩码：开
+#define STATUSLOCALEACTRL_VALMASKRESERVE_OFF	0x0B //互控轮询更新值，开关状态操作掩码：关
+
+#define CTRLEATHER_PORT_NUMSTART		0x10 //互控端口起始编号
+#define CTRLEATHER_PORT_NUMTAIL			0xFF //互控端口结束编号
 
 #define ZIGB_ENDPOINT_CTRLSECENARIO		12 //场景集群控制专用端口
 #define ZIGB_ENDPOINT_CTRLNORMAL		13 //常规数据转发专用端口
@@ -27,8 +33,11 @@
 
 #define ZIGB_PANID_MAXVAL     	0x3FFF
 
-#define ZIGB_SYSCMD_NWKOPEN	0x68 //zigb系统指令，开放网络
-#define ZIGB_SYSCMD_TIMESET	0x69 //zigb系统指令，对子节点进行网络时间同步设定
+#define ZIGB_SYSCMD_NWKOPEN					0x68 //zigb系统指令，开放网络
+#define ZIGB_SYSCMD_TIMESET					0x69 //zigb系统指令，对子节点进行网络时间同步设定
+#define ZIGB_SYSCMD_DEVHOLD					0x6A //zigb系统指令，设备网络挂起(用于更换网关，网管本身用不到)
+#define ZIGB_SYSCMD_EACHCTRL_REPORT			0x6B //zigb系统指令，子设备向网关汇报互控触发状态
+#define ZIGB_SYSCMD_COLONYPARAM_REQPERIOD	0x6C //zigb系统指令，集群控制本地受控状态周期性轮询应答(包括场景和互控)
 
 extern xQueueHandle xMsgQ_Zigb2Socket;
 extern xQueueHandle xMsgQ_zigbFunRemind;
