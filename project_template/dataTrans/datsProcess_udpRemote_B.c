@@ -30,7 +30,7 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 
 	if (pdata == NULL)return;
 
-//	os_printf("dataRemoteUDP rcv, num[%04d]<<<<.\n", len);
+//	os_printf("rmd rcv, num[%04d], head[%02X]<<<<.\n", len, *pdata);
 
 //	espconn_get_connection_info(&infoTemp_connUDP_remote_B, &pcon_info, 0);
 //	memcpy(infoTemp_connUDP_remote_B.proto.udp->remote_ip, pcon_info->remote_ip, 4);
@@ -81,8 +81,34 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 			
 		}
 		else
-		if((*pdata == FRAME_HEAD_HEARTB) &&
-			(*(pdata + 1) == dataHeartBeatLength_objSERVER)){   //远端心跳
+		if( (*pdata == DTMODEKEEPACESS_FRAMEHEAD_ONLINE) && //定时询访机制帧头
+		    (*(pdata + 1) == len) && 
+		    (*(pdata + 8) == DTMODEKEEPACESS_FRAMECMD_ASR || *(pdata + 8) == DTMODEKEEPACESS_FRAMECMD_PST) ){
+
+//			os_printf("pag mark.\n");
+
+			mptr_socketDats.portObj = Obj_udpRemote_B;
+			mptr_socketDats.command = *(pdata + 8);
+			mptr_socketDats.datsLen = len;
+			memcpy(mptr_socketDats.dats, pdata, len);
+
+			if(!memcmp(&MACSTA_ID[1], pdata + 2, 5)){
+
+				mptr_socketDats.heartBeat_IF = true;	
+				mptr_socketDats.dstObj = obj_toWIFI;
+				dataCorrect_FLG = true;
+				
+			}else{
+
+				mptr_socketDats.heartBeat_IF = true;	
+				mptr_socketDats.dstObj = obj_toZigB;
+				dataCorrect_FLG = true;				
+			}
+		}
+		else
+		if( (*pdata == FRAME_HEAD_HEARTB) &&	//远端心跳
+		    (*(pdata + 1) == dataHeartBeatLength_objSERVER) &&
+			(*(pdata + 1) == len) ){   
 
 			mptr_socketDats.portObj = Obj_udpRemote_B;
 			mptr_socketDats.command = *(pdata + 2);
@@ -184,15 +210,22 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 void ICACHE_FLASH_ATTR
 UDPremoteB_datsSend(u8 dats[], u16 datsLen){
 
-	espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
-//	os_printf("[Tips_socketUDP_B]: msg send ok!!!\n");
+	sint8 res = espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
+
+	if(res){
+
+		os_printf("[Tips_socketUDP_B]: msg send fail, res:%d, socketInfoptr:%X, dataPtr:%X, dataLen:%d\n", res, &infoTemp_connUDP_remote_B, dats, datsLen);
+	}
+
+//	espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
 }
 
 void ICACHE_FLASH_ATTR
-mySocketUDPremote_B_buildInit(u8 refRemote_IP[4]){
+mySocketUDPremote_B_buildAct(u8 refRemote_IP[4]){
 
 	memcpy(ssdp_udp_remote_B.remote_ip, refRemote_IP, 4);
-	ssdp_udp_remote_B.remote_port = 80;
+//	ssdp_udp_remote_B.remote_port = 80;
+	ssdp_udp_remote_B.remote_port = 4000;
 	ssdp_udp_remote_B.local_port = espconn_port(); //建立远端udp链接
 	infoTemp_connUDP_remote_B.type = ESPCONN_UDP;
 	
@@ -215,9 +248,12 @@ mySocketUDPremote_B_serverChange(u8 remoteIP_toChg[4]){
 		devParam_flashDataSave(obj_serverIP_default, datsSave_Temp);
 		espconn_disconnect(&infoTemp_connUDP_remote_B);
 		espconn_delete(&infoTemp_connUDP_remote_B);
-		mySocketUDPremote_B_buildInit(remoteIP_toChg);
-		os_printf("[Tips_socketUDP_B]: UDP remoteB serverIP change cmp.!!!\n");
-		
+		mySocketUDPremote_B_buildAct(remoteIP_toChg);
+		os_printf("[Tips_socketUDP_B]: UDP remoteB serverIP change to %d.%d.%d.%d cmp.!!!\n", 	remoteIP_toChg[0],
+																								remoteIP_toChg[1],
+																								remoteIP_toChg[2],
+																								remoteIP_toChg[3]);
+									
 	}else{
 
 		os_printf("[Tips_socketUDP_B]: ip no change.!!!\n");
@@ -225,6 +261,15 @@ mySocketUDPremote_B_serverChange(u8 remoteIP_toChg[4]){
 
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
+
+void ICACHE_FLASH_ATTR
+mySocketUDPremote_B_buildInit(void){
+
+	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
+	mySocketUDPremote_B_buildAct(datsRead_Temp->serverIP_default);
+//	mySocketUDPremote_B_buildAct((u8 *)serverRemote_IP_Lanbon);
+}
+
 
 
 

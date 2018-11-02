@@ -143,6 +143,7 @@ typedef struct STTthreadDatsPass{	//数据传输进程消息数据类型
 	stt_threadDatsPass_dats dats;	//数据实体
 }stt_threadDatsPass;
 
+extern const u8 debugLogOut_targetMAC[5];
 extern const u8 serverRemote_IP_Lanbon[4];
 
 extern u8 SWITCH_TYPE;

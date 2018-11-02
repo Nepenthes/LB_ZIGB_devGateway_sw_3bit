@@ -3,7 +3,7 @@
 
 #include "esp_common.h"
 
-void mySocketUDPremote_B_buildInit(u8 refRemote_IP[4]);
+void mySocketUDPremote_B_buildInit(void);
 void mySocketUDPremote_B_serverChange(u8 remoteIP_toChg[4]);
 void UDPremoteB_datsSend(u8 dats[], u16 datsLen);
 

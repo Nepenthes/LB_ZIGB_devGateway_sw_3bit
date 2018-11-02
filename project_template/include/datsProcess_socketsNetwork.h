@@ -4,9 +4,9 @@
 #include "esp_common.h"
 #include "freertos/queue.h"
 
-#define FRAME_HEAD_MOBILE	0xAA
-#define FRAME_HEAD_SERVER	0xCC
-#define FRAME_HEAD_HEARTB	0xAA
+#define FRAME_HEAD_MOBILE		0xAA
+#define FRAME_HEAD_SERVER		0xCC
+#define FRAME_HEAD_HEARTB		0xAA
 
 #define SOCKET_HEARTBEAT_PERIOD				8000	//主机心跳包周期 单位：ms
 

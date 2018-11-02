@@ -3,7 +3,11 @@
 
 #include "esp_common.h"
 
-#define HARDWARE_VERSION_DEBUG	1
+#define HARDWARE_VERSION_DEBUG	1 //是否为开发板调试
+
+#define ZNPDEVICE_CC2530	0x0A
+#define ZNPDEVICE_CC2538	0x0B
+#define ZNP_TARGET_DEVICE	ZNPDEVICE_CC2538 //znp接口器件配置
 
 #if(HARDWARE_VERSION_DEBUG == 1)
 

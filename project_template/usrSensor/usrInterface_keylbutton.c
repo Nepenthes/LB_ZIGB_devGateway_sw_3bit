@@ -540,7 +540,7 @@ touchPad_Scan(void){
 				
 				if(pressContinueGet <= 1)touchPad_functionTrigNormal(touchPad_temp, press_Short); //非连按短按触发
 				else touchPad_functionTrigNormal(touchPad_temp, press_ShortCnt); //连按短按触发
-					
+				beeps_usrActive(3, 25, 3);	
 			}
 		}
 	

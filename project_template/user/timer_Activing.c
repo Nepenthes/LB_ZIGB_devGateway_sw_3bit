@@ -125,7 +125,7 @@ timerFunCB_sntpTimerInit(void *para){
 LOCAL void ICACHE_FLASH_ATTR
 localSystime_logOut(void){
 
-	os_printf(	"\n>>===时间戳===<<\n    20%d/%02d/%02d-W%01d\n        %02d:%02d:%02d\n timeZone_H:%02d.\n", 
+	os_printf(	"\n>>===时间戳===<<\n    20%02d/%02d/%02d-W%01d\n        %02d:%02d:%02d\n timeZone_H:%02d.\n", 
 				(int)systemTime_current.time_Year,
 				(int)systemTime_current.time_Month,
 				(int)systemTime_current.time_Day,

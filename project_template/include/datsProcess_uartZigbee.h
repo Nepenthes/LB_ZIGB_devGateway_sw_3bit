@@ -11,6 +11,11 @@
 #define WIFI_FRAME_HEAD		0x7F
 #define ZIGB_FRAME_HEAD		0xFE
 
+#define DTMODEKEEPACESS_FRAMEHEAD_ONLINE	0xFA	//定时询访模式帧头-internet在线
+#define DTMODEKEEPACESS_FRAMEHEAD_OFFLINE	0xFB	//定时询访模式帧头-internet离线
+#define	DTMODEKEEPACESS_FRAMECMD_ASR		0xA1	//定时询访模式帧命令 - 被动应答
+#define	DTMODEKEEPACESS_FRAMECMD_PST		0xA2	//定时询访模式帧命令 - 主动上传
+
 #define ZIGB_FRAMEHEAD_CTRLLOCAL		0xAA //常规控制帧头：本地
 #define ZIGB_FRAMEHEAD_CTRLREMOTE		0xCC //常规控制帧头：远程
 #define ZIGB_FRAMEHEAD_HEARTBEAT		0xAB //常规控制帧头：心跳<网关internet在线>
@@ -29,15 +34,20 @@
 #define ZIGB_CLUSTER_DEFAULT_DEVID		13
 #define ZIGB_CLUSTER_DEFAULT_CULSTERID	13
 
-#define ZIGBNWKOPENTIME_DEFAULT	12 //zigb网络开放时间 默认值
+#define ZIGBNWKOPENTIME_DEFAULT	30 //zigb网络开放时间 默认值 单位：ms
 
-#define ZIGB_PANID_MAXVAL     	0x3FFF
+#define ZIGB_PANID_MAXVAL     	0x3FFF //随机产生PANID最大值
 
 #define ZIGB_SYSCMD_NWKOPEN					0x68 //zigb系统指令，开放网络
 #define ZIGB_SYSCMD_TIMESET					0x69 //zigb系统指令，对子节点进行网络时间同步设定
 #define ZIGB_SYSCMD_DEVHOLD					0x6A //zigb系统指令，设备网络挂起(用于更换网关，网管本身用不到)
 #define ZIGB_SYSCMD_EACHCTRL_REPORT			0x6B //zigb系统指令，子设备向网关汇报互控触发状态
 #define ZIGB_SYSCMD_COLONYPARAM_REQPERIOD	0x6C //zigb系统指令，集群控制本地受控状态周期性轮询应答(包括场景和互控)
+
+#define zigB_remoteDataTransASY_QbuffLen 		100 //本地非阻塞远端数据请求，缓存队列
+#define zigB_remoteDataTransASY_txPeriod		300 //单条数据请求周期	单位：ms
+#define zigB_remoteDataTransASY_txReapt			10	//单条数据请求重复次数
+#define zigB_remoteDataTransASY_txUartOnceWait	4	//异步串口通信远端数据请求单次等待时间 单位：ms
 
 extern xQueueHandle xMsgQ_Zigb2Socket;
 extern xQueueHandle xMsgQ_zigbFunRemind;
@@ -69,7 +79,31 @@ typedef struct{
 
 	u8 dats[96];
 	u8 datsLen;
-}uartToutDatsRcv;
+}sttUartRcv_rmoteDatComming;
+
+typedef struct{
+
+	u8 dats[32];
+	u8 datsLen;
+}sttUartRcv_sysDat;
+
+typedef struct{
+
+	u8 dats[16];
+	u8 datsLen;
+}sttUartRcv_rmDatsReqResp;
+
+#define dataRemote_RESPLEN 8
+typedef struct{
+
+	u8 	dataReq[96];
+	u8 	dataReq_Len;
+	u8 	dataResp[dataRemote_RESPLEN];
+	u8 	dataResp_Len;
+
+	u16 dataReqPeriod;	//指令下达单次发送周期
+	u8 	repeat_Loop;	//指令下达发送重复次数
+}stt_dataRemoteReq;
 
 typedef struct{
 
@@ -77,6 +111,12 @@ typedef struct{
 	u8 frameResp[96];
 	u8 frameRespLen;
 }datsZigb_reqGet;
+
+typedef struct{
+
+	u16 keepTxUntilCmp_IF:1; // 0:非死磕（超时前只发一次）/ 1:死磕（超时前周期性发送） 
+	u16 datsTxKeep_Period:15; //死磕周期
+}remoteDataReq_method;
 
 /*Zigbee节点设备信息链表数据结构*/
 #define DEVMAC_LEN	5
@@ -145,7 +185,8 @@ bool zigb_datsRequest(u8 frameREQ[],
 						   u8 frameREQ_Len,
 					  	   u8 resp_cmd[2],
 						   datsZigb_reqGet *datsRX,
-						   u16 timeWait);
+						   u16 timeWait,
+						   remoteDataReq_method method);
 bool zigb_VALIDA_INPUT(uint8 REQ_CMD[2],		//指令
 					        uint8 REQ_DATS[],	//数据
 					        uint8 REQdatsLen,	//数据长度

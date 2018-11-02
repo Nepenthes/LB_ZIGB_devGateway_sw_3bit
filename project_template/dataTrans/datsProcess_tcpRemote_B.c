@@ -35,7 +35,9 @@ myTCP_remoteBCallback_dataRcv(void *arg, char *pdata, unsigned short len){
 
 //	printf_datsHtoA("[Tips_socketTCP_B]:", pdata, len);
 
-	os_printf("[Tips_socketTCP_B](datsLen: %d): msgComming is : %s\n", len, pdata);
+//	os_printf("[Tips_socketTCP_B](datsLen: %d): msgComming is : %s\n", len, pdata);
+
+	
 }
 
 LOCAL void ICACHE_FLASH_ATTR

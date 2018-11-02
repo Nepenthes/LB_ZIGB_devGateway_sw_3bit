@@ -120,6 +120,7 @@ myUDP_local_ACallback(void *arg, char *pdata, unsigned short len){
 					if( (*(pdata + 3) == FRAME_MtoSCMD_cmdConfigSearch) ){
 				
 						mptr_socketDats.dstObj = obj_toALL;
+						os_printf("rcv cfgRsp.\n");
 						
 					}else{
 				

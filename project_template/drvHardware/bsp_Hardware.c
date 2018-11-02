@@ -76,9 +76,8 @@ virtual_SPI595and597_gpioInit(void){
 	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
 	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTDO_U);
 
-//	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
-//	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTDO_U);
-
+	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDI_U, FUNC_GPIO12);
+	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTDI_U);
 
 //	uint32 pwm_duty[3] = {TIPS_LEDRGB_DUTYUINT * 100, TIPS_LEDRGB_DUTYUINT * 100, TIPS_LEDRGB_DUTYUINT * 100};
 
@@ -208,7 +207,7 @@ timerFunCB_hw595and597datsReales(void *para){
 						if(tips_Count < tips_Period){
 						
 							tips_Count ++;
-							(beeps_en)?(TIPS_BEEP_SET(GPIO_INPUT_GET(GPIO_ID_PIN(GPIO_PIN_BEEP)))):(TIPS_BEEP_SET(1));
+							(beeps_en)?(TIPS_BEEP_SET(!GPIO_INPUT_GET(GPIO_ID_PIN(GPIO_PIN_BEEP)))):(TIPS_BEEP_SET(1));
 							
 						}else{
 						
@@ -319,7 +318,7 @@ virtual_SPI595and597_gpioInit(void){
 	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTMS_U);
 
 	PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTDO_U, FUNC_GPIO15);
-	PIN_PULLUP_EN(PERIPHS_IO_MUX_MTDO_U);
+	PIN_PULLUP_DIS(PERIPHS_IO_MUX_MTDO_U);
 
 
 //	uint32 pwm_duty[3] = {TIPS_LEDRGB_DUTYUINT * 100, TIPS_LEDRGB_DUTYUINT * 100, TIPS_LEDRGB_DUTYUINT * 100};
@@ -340,7 +339,6 @@ timerFunCB_hw595and597datsReales(void *para){
 
 	u8 datsOut_temp = 0;
 	u8 datsIn_temp	= 0;
-	static u8 datsIn_cfm = 0;
 
 	u8 loop;
 
@@ -456,8 +454,10 @@ timerFunCB_hw595and597datsReales(void *para){
 		}
 	}
 	
+//	datsIn_temp = spi595and597_datsReales(datsOut_temp);	//硬件执行
+//	if(datsIn_temp == spi595and597_datsReales(datsOut_temp))datsIn_cfm = datsIn_temp; //信号确认
+
 	datsIn_temp = spi595and597_datsReales(datsOut_temp);	//硬件执行
-	if(datsIn_temp == spi595and597_datsReales(datsOut_temp))datsIn_cfm = datsIn_temp; //信号确认
 
 //	usrDats_sensor.usrDcode_3 		= (datsIn_cfm & 0x80) >> 7;	//597读取到的输入值进行填装
 //	usrDats_sensor.usrDcode_2 		= (datsIn_cfm & 0x40) >> 6;
@@ -468,16 +468,85 @@ timerFunCB_hw595and597datsReales(void *para){
 //	usrDats_sensor.usrKeyIn_rly_1 	= (datsIn_cfm & 0x02) >> 1;
 //	usrDats_sensor.usrKeyIn_rly_0 	= (datsIn_cfm & 0x01) >> 0;
 
-	usrDats_sensor.usrKeyIn_fun_0 	= (datsIn_cfm & 0x02) >> 1;	//597读取到的输入值进行填装
-	usrDats_sensor.usrKeyIn_rly_2 	= (datsIn_cfm & 0x08) >> 3;
-	usrDats_sensor.usrKeyIn_rly_1 	= (datsIn_cfm & 0x01) >> 0;
-	usrDats_sensor.usrKeyIn_rly_0 	= (datsIn_cfm & 0x04) >> 2;
-	usrDats_sensor.usrDcode_3 		= (datsIn_cfm & 0x80) >> 7;
-	usrDats_sensor.usrDcode_2 		= (datsIn_cfm & 0x40) >> 6;
-	usrDats_sensor.usrDcode_1 		= (datsIn_cfm & 0x20) >> 5;
-	usrDats_sensor.usrDcode_0 		= (datsIn_cfm & 0x10) >> 4;
+	usrDats_sensor.usrKeyIn_fun_0 	= (datsIn_temp & 0x02) >> 1;	//597读取到的输入值进行填装
+	usrDats_sensor.usrKeyIn_rly_2 	= (datsIn_temp & 0x08) >> 3;
+	usrDats_sensor.usrKeyIn_rly_1 	= (datsIn_temp & 0x01) >> 0;
+	usrDats_sensor.usrKeyIn_rly_0 	= (datsIn_temp & 0x04) >> 2;
+	usrDats_sensor.usrDcode_3 		= (datsIn_temp & 0x80) >> 7;
+	usrDats_sensor.usrDcode_2 		= (datsIn_temp & 0x40) >> 6;
+	usrDats_sensor.usrDcode_1 		= (datsIn_temp & 0x20) >> 5;
+	usrDats_sensor.usrDcode_0 		= (datsIn_temp & 0x10) >> 4;
 
 	P_rlyTips_reales ++;
+
+	{ //蜂鸣器专用
+
+		static u8 period_beep = 3;		//beeps专用
+		static u8 count_beep  = 0;	
+
+		if(count_beep < period_beep)count_beep ++;
+		else{
+
+			static u16 	tips_Period = 20 * 50 / 2;
+			static u16 	tips_Count 	= 0;
+			static u8 	tips_Loop 	= 2 * 4;
+			static bool beeps_en 	= 1;
+
+			count_beep = 0;
+
+			switch(dev_statusBeeps){
+
+				case beepsMode_standBy:{
+					
+					period_beep = devTips_beep.tips_Period;
+					tips_Period = 20 * devTips_beep.tips_time / period_beep;
+					tips_Loop 	= 2 * devTips_beep.tips_loop;
+					tips_Count 	= 0;
+					beeps_en 	= 1;
+					dev_statusBeeps = beepsWorking;
+		
+				}break;
+				
+				case beepsWorking:{
+				
+					if(tips_Loop){
+					
+						if(tips_Count < tips_Period){
+						
+							tips_Count ++;
+							(beeps_en)?(TIPS_BEEP_SET(!GPIO_INPUT_GET(GPIO_ID_PIN(GPIO_PIN_BEEP)))):(TIPS_BEEP_SET(1));
+							
+						}else{
+						
+							tips_Count = 0;
+							beeps_en = !beeps_en;
+							tips_Loop --;
+						}
+						
+					}else{
+					
+						dev_statusBeeps = beepsComplete;
+					}
+				
+				}break;
+				
+				case beepsComplete:{
+				
+					tips_Count = 0;
+					beeps_en = 1;
+					TIPS_BEEP_SET(1);
+					dev_statusBeeps = beepsMode_null;
+					
+				}break;
+			
+				default:{
+				
+					TIPS_BEEP_SET(1);
+					
+				}break;
+			}
+		}
+	}
 
 	{ //1ms计时专用 //不可被smartconfig打断
 

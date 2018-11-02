@@ -27,11 +27,20 @@ u16	 sysZigb_random = 0x1234;
 xQueueHandle xMsgQ_Zigb2Socket; //zigbee到socket数据中转消息队列
 xQueueHandle xMsgQ_uartToutDats_dataSysRespond; //串口数据接收超时断帧数据队列-协议栈或系统回复数据
 xQueueHandle xMsgQ_uartToutDats_dataRemoteComing; //串口数据接收超时断帧数据队列-远端数据
+xQueueHandle xMsgQ_uartToutDats_rmDataReqResp; //串口数据接收超时断帧数据队列-远端数据请求后的应答
 xQueueHandle xMsgQ_timeStampGet; //网络时间戳获取消息队列
 xQueueHandle xMsgQ_zigbFunRemind; //zigb功能触发消息队列
 
-#define fifo_Len  128
-LOCAL uint8 uart0_rxTemp[fifo_Len] = {0};
+#define FifoFullIntr_lengthLimit	120 //fifo溢出值定义
+#define TimeOutIntr_timeLimit	100 //超时接收时间定义
+#define fifoLength  1024 //串口缓存长度
+
+LOCAL uint16 uartBuff_baseInsert = 0; //缓存起始插入点,续收游标
+LOCAL uint16 uartBuff_baseInsertStart = 0; //插入点起始值（当上一帧解析完成后还留有残帧且残帧头为FE时，则当前帧从残帧向后延续）
+LOCAL uint8 fifoFull_CNT = 0; //串口溢出计次
+LOCAL uint8 uart0_rxTemp[fifoLength] = {0};
+
+stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen] = {0};
 
 LOCAL xTaskHandle pxTaskHandle_threadZigbee;
 
@@ -41,7 +50,7 @@ LOCAL os_timer_t timer_zigbNodeDevDetectManage;
 LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_Z2S(void){
 
-	xMsgQ_Zigb2Socket = xQueueCreate(20, sizeof(stt_threadDatsPass));
+	xMsgQ_Zigb2Socket = xQueueCreate(30, sizeof(stt_threadDatsPass));
 	if(0 == xMsgQ_Zigb2Socket)return FAIL;
 	else return OK;
 }
@@ -49,11 +58,13 @@ appMsgQueueCreat_Z2S(void){
 LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_uartToutDatsRcv(void){
 
-	xMsgQ_uartToutDats_dataSysRespond = xQueueCreate(80, sizeof(uartToutDatsRcv));
+	xMsgQ_uartToutDats_dataSysRespond = xQueueCreate(50, sizeof(sttUartRcv_sysDat));
 	if(0 == xMsgQ_uartToutDats_dataSysRespond)return FAIL;
-	else xMsgQ_uartToutDats_dataRemoteComing = xQueueCreate(50, sizeof(uartToutDatsRcv));
+	else xMsgQ_uartToutDats_dataRemoteComing = xQueueCreate(50, sizeof(sttUartRcv_rmoteDatComming));
 	if(0 == xMsgQ_uartToutDats_dataRemoteComing)return FAIL;
-	else return FAIL;
+	else xMsgQ_uartToutDats_rmDataReqResp = xQueueCreate(50, sizeof(sttUartRcv_rmDatsReqResp));
+	if(0 == xMsgQ_uartToutDats_rmDataReqResp)return FAIL;
+	else return OK;
 }
 
 LOCAL STATUS ICACHE_FLASH_ATTR
@@ -334,49 +345,165 @@ myUart0datsTrans_intr_funCB(void *para){
 			//os_printf("FRM_ERR\r\n");
 			WRITE_PERI_REG(UART_INT_CLR(uart_no), UART_FRM_ERR_INT_CLR);
 		} 
-		else if (UART_RXFIFO_FULL_INT_ST == (uart_intr_status & UART_RXFIFO_FULL_INT_ST)) {
-			os_printf("full\r\n");
+		else if (UART_RXFIFO_FULL_INT_ST == (uart_intr_status & UART_RXFIFO_FULL_INT_ST)) { //溢出接头
+//			os_printf(">>>>>>>>>>>>fifo full.\n");
 			fifo_Num = (READ_PERI_REG(UART_STATUS(UART0)) >> UART_RXFIFO_CNT_S)&UART_RXFIFO_CNT;
 			buf_idx = 0;
 
-			while (buf_idx < fifo_Num) {
-				uartTX_char(UART0, READ_PERI_REG(UART_FIFO(UART0)) & 0xFF);
+			if(!fifoFull_CNT){ //若单周期从未溢出，则进行相关值初始化
+
+				memset(&uart0_rxTemp[uartBuff_baseInsertStart], 0, (fifoLength - uartBuff_baseInsertStart) * sizeof(uint8));
+				uartBuff_baseInsert = uartBuff_baseInsertStart; //续收游标初始化
+			}
+
+			while (buf_idx < fifo_Num) { //取溢出之内数据
+				
+				uart0_rxTemp[buf_idx + uartBuff_baseInsert] = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
+//				uartTX_char(UART0, READ_PERI_REG(UART_FIFO(UART0)) & 0xFF);
 				buf_idx++;
 			}
 
+			uartBuff_baseInsert += FifoFullIntr_lengthLimit; //续收游标更新
+			fifoFull_CNT ++; //溢出次数更新
+
 			WRITE_PERI_REG(UART_INT_CLR(UART0), UART_RXFIFO_FULL_INT_CLR);
 		} 
-		else if (UART_RXFIFO_TOUT_INT_ST == (uart_intr_status & UART_RXFIFO_TOUT_INT_ST)) {
+		else if (UART_RXFIFO_TOUT_INT_ST == (uart_intr_status & UART_RXFIFO_TOUT_INT_ST)) { //超时截漏
 //			os_printf("tout\r\n");
 			
 			fifo_Num = (READ_PERI_REG(UART_STATUS(UART0)) >> UART_RXFIFO_CNT_S)&UART_RXFIFO_CNT;
 			buf_idx = 0;
 
-			memset(uart0_rxTemp, 0, fifo_Num * sizeof(uint8));
+			u16 uartBuff_rcvLength = 0; //单周期串口接收到的缓存总长度（中转）
+			
+			if(!fifoFull_CNT){ //单周期内，fifo溢出次数是否为零
+
+				memset(&uart0_rxTemp[uartBuff_baseInsertStart], 0, (fifoLength - uartBuff_baseInsertStart) * sizeof(uint8)); //单个接收周期内若非存在溢出，则缓存清零
+				uartBuff_baseInsert =  uartBuff_baseInsertStart; //续收游标初始化
+				uartBuff_rcvLength = uartBuff_baseInsertStart + fifo_Num; //单周期缓存接收数据总长度更新
+			}
+			else{
+
+				uartBuff_rcvLength = uartBuff_baseInsertStart + fifo_Num + fifoFull_CNT * FifoFullIntr_lengthLimit; //单周期缓存接收数据总长度更新
+				fifoFull_CNT = 0; //溢出次数清零，超时收尾，必清零
+			}
+
 			while (buf_idx < fifo_Num) { //取超时之前所接收到的数据
 				
-				uart0_rxTemp[buf_idx] = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
+				uart0_rxTemp[buf_idx + uartBuff_baseInsert] = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
 //				uartTX_char(UART0, READ_PERI_REG(UART_FIFO(UART0)) & 0xFF);
 				buf_idx++;
 			}
 
 			{ //按条件填装队列
 
-				const u8 cmd_remoteDataComing[2] = {0x44, 0x81};
-				const u8 cmd_remoteNodeOnline[2] = {0x45, 0xCA};
+				const u8 cmd_remoteDataComing[2] 	= {0x44, 0x81};
+				const u8 cmd_remoteNodeOnline[2] 	= {0x45, 0xCA};
+				const u8 cmd_rmdataReqResp[2] 		= {0x44, 0x80}; 
+				u16 frameNum_reserve = uartBuff_rcvLength;
+				u16 frameHead_insert = 0; //帧头索引
+				u8 frameParsing_num = 0; //已解析的数据帧数量
+				u8 frameTotal_Len = 0; //单总帧长缓存
 
-				uartToutDatsRcv mptr_uartDatsRcv;
-				memcpy(mptr_uartDatsRcv.dats, uart0_rxTemp, fifo_Num);
-				mptr_uartDatsRcv.datsLen = fifo_Num;
+				while(frameNum_reserve){
 
-				if(!memcmp(&uart0_rxTemp[2], cmd_remoteDataComing, 2) || !memcmp(&uart0_rxTemp[2], cmd_remoteNodeOnline, 2)){
+					sttUartRcv_rmoteDatComming mptr_rmoteDatComming;
+					sttUartRcv_sysDat mptr_sysDat;
+					sttUartRcv_rmDatsReqResp mptr_rmDatsReqResp;
 
-					xQueueSend(xMsgQ_uartToutDats_dataRemoteComing, (void *)&mptr_uartDatsRcv, ( portTickType ) 0);
-					
-				}else{ //除了与远端有关的数据 其他都是系统响应数据
+					frameTotal_Len = uart0_rxTemp[frameHead_insert + 1] + 5; //单帧长更新（拆包）
+				
+					if((uart0_rxTemp[frameHead_insert] == ZIGB_FRAME_HEAD) && (frameNum_reserve >= frameTotal_Len)){ //超时断帧多收包只要断帧帧头为FE就没事，可做多重解析，重要的是帧头不是FE就有事
 
-					xQueueSend(xMsgQ_uartToutDats_dataSysRespond, (void *)&mptr_uartDatsRcv, ( portTickType ) 0);
+						frameParsing_num ++;
+
+						if(!memcmp(&uart0_rxTemp[frameHead_insert + 2], cmd_remoteDataComing, 2) || !memcmp(&uart0_rxTemp[frameHead_insert + 2], cmd_remoteNodeOnline, 2)){ //收到远端数据填装
+						
+							memcpy(mptr_rmoteDatComming.dats, &uart0_rxTemp[frameHead_insert], frameTotal_Len);
+							mptr_rmoteDatComming.datsLen = frameTotal_Len;
+
+							if(uart0_rxTemp[frameHead_insert + 21] == ZIGB_FRAMEHEAD_CTRLLOCAL && uart0_rxTemp[frameHead_insert + 24] == FRAME_MtoSCMD_cmdConfigSearch){ //搜索码回码优先处理
+
+								xQueueSendToFront(xMsgQ_uartToutDats_dataRemoteComing, (void *)&mptr_rmoteDatComming, ( portTickType ) 0);
+								
+							}else{
+
+								xQueueSend(xMsgQ_uartToutDats_dataRemoteComing, (void *)&mptr_rmoteDatComming, ( portTickType ) 0);
+							}
+
+//							os_printf("Q_r push.\n");
+							
+						}else
+						if(!memcmp(&uart0_rxTemp[frameHead_insert + 2], cmd_rmdataReqResp, 2)){ //远端数据请求专用应答队列填装
+						
+							memcpy(mptr_rmDatsReqResp.dats, &uart0_rxTemp[frameHead_insert], frameTotal_Len);
+							mptr_rmDatsReqResp.datsLen = frameTotal_Len;
+
+							xQueueSend(xMsgQ_uartToutDats_rmDataReqResp, (void *)&mptr_rmDatsReqResp, ( portTickType ) 0);
+
+						}else{ //剩下的不分类了，都是系统响应数据
+						
+							memcpy(mptr_sysDat.dats, &uart0_rxTemp[frameHead_insert], frameTotal_Len);
+							mptr_sysDat.datsLen = frameTotal_Len;
+
+							xQueueSend(xMsgQ_uartToutDats_dataSysRespond, (void *)&mptr_sysDat, ( portTickType ) 0);
+//							os_printf("Q_s push.\n");
+
+						}
+
+						frameHead_insert += frameTotal_Len; //索引更新
+						frameNum_reserve -= frameTotal_Len; //剩余数据长度更新
+						uartBuff_baseInsertStart = 0; //完整帧情况下，串口缓存插入点起始值直接为0
+						
+					}
+					else{
+
+//						os_printf("tout_err.\n");
+						if(frameNum_reserve > 0){
+
+							if(uart0_rxTemp[frameHead_insert] == ZIGB_FRAME_HEAD){ //有残帧且帧头合法，那么就是合法残帧，进行处理
+
+								memcpy(uart0_rxTemp, &uart0_rxTemp[frameHead_insert], frameNum_reserve); //合法残帧保留到下一帧合并
+								uartBuff_baseInsertStart = frameNum_reserve; //串口缓存插入点起始值更新
+								frameNum_reserve = 0;
+								
+							}else{ //进行非法残帧处理
+
+								u8 	loop = 0;
+								bool frameHead_bingo = false;
+								for(loop = 1; loop < frameTotal_Len; loop ++){ //上一帧标的长度范围内回溯寻找正确帧头（范围内不包含原帧头，不能重复回溯），再没找到就抛弃（实际串口数据流观察中发现，连包内小几率会出现缺漏字节的残帧混杂其中，即标的帧长与实际帧长不一致，为保证残包后的完整包不被浪费，作此业务逻辑）
+
+									if(uart0_rxTemp[frameHead_insert - loop] == ZIGB_FRAME_HEAD){
+
+										frameHead_bingo = true;
+										break;
+									}
+								}
+								if(frameHead_bingo == true){
+
+									frameHead_insert -= loop; //数据索引更新
+									frameNum_reserve += loop; //数据长度剩余数更新
+									continue;
+									
+								}else{
+
+									uartBuff_baseInsertStart = 0; //未找到合法帧头，抛弃残帧
+									frameNum_reserve = 0; //数据长度剩余数强制清零
+								}	
+							}
+
+							os_printf(">>>>>>>>>errFrame tail:%02X-%02X-%02X, legal_impStart:%02X.\n",	uart0_rxTemp[uartBuff_rcvLength - 3],
+																										uart0_rxTemp[uartBuff_rcvLength - 2],
+																										uart0_rxTemp[uartBuff_rcvLength - 1],
+																										uartBuff_baseInsertStart);
+						}
+					}				
 				}
+
+//				if(uart0_rxTemp[1] != (fifo_Num - 5)){
+//				
+//					os_printf("F_Head:%02X, A_Len:%02X(+5), R_Len:%04X, frame_P:%02d.\n", uart0_rxTemp[0], uart0_rxTemp[1], uartBuff_rcvLength, frameParsing_num);
+//				}
 			}
 
 //			printf_datsHtoA("[Tips_uart]:", uart0_rxTemp, fifo_Num);
@@ -412,7 +539,7 @@ uart0Init_datsTrans(void){
     uart_config.parity       	 	= USART_Parity_None;
     uart_config.stop_bits     		= USART_StopBits_1;
     uart_config.flow_ctrl      		= USART_HardwareFlowControl_None;
-    uart_config.UART_RxFlowThresh 	= 120;
+    uart_config.UART_RxFlowThresh 	= 0;
     uart_config.UART_InverseMask 	= UART_None_Inverse;
 	UART_ParamConfig(UART0, &uart_config);
 	
@@ -421,8 +548,9 @@ uart0Init_datsTrans(void){
 //	uart_intr.UART_RX_TimeOutIntrThresh = 2;
 //	uart_intr.UART_TX_FifoEmptyIntrThresh = 20;
 
-	uart_intr.UART_IntrEnMask = UART_RXFIFO_TOUT_INT_ENA;
-	uart_intr.UART_RX_TimeOutIntrThresh = 2; // 2单位超时已是调试最小值，继续减小将会导致提前断帧
+	uart_intr.UART_IntrEnMask = UART_RXFIFO_TOUT_INT_ENA | UART_RXFIFO_FULL_INT_ENA; //只是能fifo溢出中断 与 超时中断
+	uart_intr.UART_RX_FifoFullIntrThresh = FifoFullIntr_lengthLimit;
+	uart_intr.UART_RX_TimeOutIntrThresh = TimeOutIntr_timeLimit; // 2单位超时已是调试最小值，继续减小将会导致提前断帧,(tips:超时断帧多收包只要断帧帧头为FE就没事，重要的是帧头不是FE就有事，也就是说超时时间大一点没关系，不要太小了，太小了就会产生残帧)
 
 	UART_IntrConfig(UART0, &uart_intr);
 
@@ -484,16 +612,24 @@ zigb_datsRequest(u8 frameREQ[],	//请求帧
 					  u8 frameREQ_Len,	//请求帧长度
 					  u8 resp_cmd[2],	//预期应答指令
 					  datsZigb_reqGet *datsRX,	//预期应答数据
-					  u16 timeWait){	//超时时间
+					  u16 timeWait, //超时时间
+					  remoteDataReq_method method){ //是否死磕
 
-	uartToutDatsRcv rptr_uartDatsRcv;
+	sttUartRcv_sysDat rptr_uartDatsRcv;
 	portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
 	uint16 	datsRcv_tout= timeWait;
 
-	uartZigbee_putDats(UART0, frameREQ, frameREQ_Len);
+	if(!method.keepTxUntilCmp_IF)uartZigbee_putDats(UART0, frameREQ, frameREQ_Len); //非死磕，超时前只发一次
+	
 	while(datsRcv_tout --){
 
 		vTaskDelay(1);
+
+		if(method.keepTxUntilCmp_IF){ //死磕模式下周期性发送指令
+
+			if((datsRcv_tout % method.datsTxKeep_Period) == 0)uartZigbee_putDats(UART0, frameREQ, frameREQ_Len);
+		}
+	
 		xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
 		while(xMsgQ_rcvResult == pdTRUE){
 			
@@ -510,6 +646,8 @@ zigb_datsRequest(u8 frameREQ[],	//请求帧
 			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_dataSysRespond, (void *)&rptr_uartDatsRcv,	(portTickType) 0);
 		}
 	}
+
+	vTaskDelay(1);
 
 	return false;
 }
@@ -530,12 +668,12 @@ zigb_VALIDA_INPUT(uint8 REQ_CMD[2],			//指令
 	uint8 	loop = 0;
 	uint8 	datsTX_Len;
 	uint16 	local_timeDelay = timeDelay;
-	uartToutDatsRcv rptr_uartDatsRcv;
+	sttUartRcv_sysDat rptr_uartDatsRcv;
 	portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
 
 	bool	result_REQ = false;
 	
-	datsTX_Len = ZigB_TXFrameLoad(dataTXBUF,REQ_CMD,2,REQ_DATS,REQdatsLen);
+	datsTX_Len = ZigB_TXFrameLoad(dataTXBUF, REQ_CMD, 2, REQ_DATS, REQdatsLen);
 
 	for(loop = 0;loop < times;loop ++){
 
@@ -644,8 +782,8 @@ zigb_clusterCtrlEachotherCfg(void){
 LOCAL bool ICACHE_FLASH_ATTR
 zigbNetwork_OpenIF(bool opreat_Act, u8 keepTime){
 
-	const datsAttr_ZigbInit default_param = {{0x26,0x08}, {0xFC,0xFF,0x00}, 0x03, {0xFE,0x01,0x66,0x08,0x00,0x6F}, 0x06, 500};	//命令帧，默认参数
-#define nwOpenIF_paramLen 100
+	const datsAttr_ZigbInit default_param = {{0x26,0x08}, {0xFF,0xFF,0x00}, 0x03, {0xFE,0x01,0x66,0x08,0x00,0x6F}, 0x06, 500};	//命令帧，默认参数
+#define nwOpenIF_paramLen 64
 
 	bool result_Set = false;
 
@@ -673,7 +811,7 @@ zigbNetwork_OpenIF(bool opreat_Act, u8 keepTime){
 LOCAL bool ICACHE_FLASH_ATTR
 zigB_sysTimeSet(u32_t timeStamp){
 
-	const datsAttr_ZigbInit default_param = {{0x21,0x10},{0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},0x0B,{0xFE,0x01,0x61,0x10,0x00},0x05,30}; //zigbee系统时间设置，默认参�?
+	const datsAttr_ZigbInit default_param = {{0x21,0x10},{0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},0x0B,{0xFE,0x01,0x61,0x10,0x00},0x05,30}; //zigbee系统时间设置，默认参敿
 	u8 timeStampArray[11] = {0};
 	bool resultSet = false;
 	u32_t timeStamp_temp = timeStamp;
@@ -707,7 +845,10 @@ zigB_sysTimeSet(u32_t timeStamp){
 								  default_param.timeTab_waitAnsr);
 	
 //	os_printf("[Tips_uartZigb]: zigbee sysTime set result: %d.\n", resultSet);
-	if(resultSet)os_printf("[Tips_uartZigb]: zigbSystime set success.\n");
+	if(resultSet){
+
+//		os_printf("[Tips_uartZigb]: zigbSystime set success.\n");
+	}
 	else os_printf("[Tips_uartZigb]: zigbSystime set fail.\n");
 
 	return resultSet;
@@ -723,12 +864,14 @@ zigB_sysTimeGetRealesWithLocal(void){
 	const u8 frameREQ_zigbSysTimeGet[5] = {0xFE, 0x00, 0x21, 0x11, 0x30};	//zigb系统时间获取指令帧
 	const u8 cmdResp_zigbSysTimeGet[2] 	= {0x61, 0x11};	//zigb系统时间获取预期响应指令
 	bool resultREQ = false;
+	const remoteDataReq_method datsReq_method = {0};
 
 	resultREQ = zigb_datsRequest((u8 *)frameREQ_zigbSysTimeGet,
 								 5,
 								 (u8 *)cmdResp_zigbSysTimeGet,
 								 local_datsParam,
-								 30);
+								 30,
+								 datsReq_method);
 
 	if(true == resultREQ){
 
@@ -803,12 +946,16 @@ ZigB_resetInit(void){
 
 	#define zigbInit_loopTry 	3
 	#define zigbInit_onceWait 	500
-
-	const u8 initCmp_Frame[11] = {0xFE, 0x06, 0x41, 0x80, 0x01, 0x02, 0x00, 0x02, 0x06, 0x03, 0xC3};
 	
+#if(ZNP_TARGET_DEVICE == ZNPDEVICE_CC2530)
+	const u8 initCmp_Frame[11] = {0xFE, 0x06, 0x41, 0x80, 0x01, 0x02, 0x00, 0x02, 0x06, 0x03, 0xC3};
+#elif(ZNP_TARGET_DEVICE == ZNPDEVICE_CC2538)
+	const u8 initCmp_Frame[11] = {0xFE, 0x06, 0x41, 0x80, 0x00, 0x02, 0x00, 0x02, 0x06, 0x03, 0xC2};
+#endif
+
 	u8 	loop = 0;
 	u16 timeWait = 0;
-	uartToutDatsRcv rptr_uartDatsRcv;
+	sttUartRcv_sysDat rptr_uartDatsRcv;
 	portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
 	bool result_Init = false;
 
@@ -852,12 +999,14 @@ ZigB_getPanIDCurrent(void){
 	const u8 frameREQ_zigbPanIDGet[6] 	= {0xFE, 0x01, 0x26, 0x06, 0x06, 0x27};	//zigb PANID获取指令帧
 	const u8 cmdResp_zigbPanIDGet[2] 	= {0x66, 0x06};	//zigb PANID获取预期响应指令
 	bool resultREQ = false;
+	const remoteDataReq_method datsReq_method = {0};
 
 	resultREQ = zigb_datsRequest((u8 *)frameREQ_zigbPanIDGet,
 								 6,
 								 (u8 *)cmdResp_zigbPanIDGet,
 								 local_datsParam,
-								 30);
+								 30,
+								 datsReq_method);
 
 	if(true == resultREQ){
 
@@ -879,12 +1028,14 @@ ZigB_getIEEEAddr(void){
 	const u8 frameREQ_zigbPanIDGet[6] 	= {0xFE, 0x01, 0x26, 0x06, 0x01, 0x20};	//zigb IEEE地址获取指令帧
 	const u8 cmdResp_zigbPanIDGet[2] 	= {0x66, 0x06};	//zigb IEEE地址获取预期响应指令
 	bool resultREQ = false;
+	const remoteDataReq_method datsReq_method = {0};
 
 	resultREQ = zigb_datsRequest((u8 *)frameREQ_zigbPanIDGet,
 								 6,
 								 (u8 *)cmdResp_zigbPanIDGet,
 								 local_datsParam,
-								 30);
+								 30,
+								 datsReq_method);
 
 	if(true == resultREQ){
 
@@ -911,12 +1062,14 @@ ZigB_getRandom(void){
 	const u8 frameREQ_zigbPanIDGet[5] 	= {0xFE, 0x00, 0x21, 0x0C, 0x2D};	//zigb 系统随机数获取指令帧
 	const u8 cmdResp_zigbPanIDGet[2] 	= {0x61, 0x0C};	//zigb 系统随机数获取预期响应指令
 	bool resultREQ = false;
+	const remoteDataReq_method datsReq_method = {0};
 
 	resultREQ = zigb_datsRequest((u8 *)frameREQ_zigbPanIDGet,
 								 5,
 								 (u8 *)cmdResp_zigbPanIDGet,
 								 local_datsParam,
-								 30);
+								 30,
+								 datsReq_method);
 
 	if(true == resultREQ){
 
@@ -943,7 +1096,7 @@ ZigB_inspectionSelf(bool hwReset_IF){ //是否硬件复位
 	const datsAttr_ZigbInit default_param = {{0x26,0x08}, {0xFC,0xFF,0x00}, 0x03, {0xFE,0x01,0x66,0x08,0x00,0x6F}, 0x06, 500};	//命令帧，默认参数
 	const u8 frameREQ_zigbJoinNWK[5] 	= {0xFE, 0x00, 0x26, 0x00, 0x26};	//zigb激活网络指令帧
 	const u8 cmdResp_zigbJoinNWK[2] 	= {0x45, 0xC0};	//zigb激活网络预期响应指令
-	
+	const remoteDataReq_method datsReq_method = {0};
 	bool resultREQ = false;
 
 	if(hwReset_IF)resultREQ = ZigB_resetInit();
@@ -955,7 +1108,8 @@ ZigB_inspectionSelf(bool hwReset_IF){ //是否硬件复位
 									 5,
 									 (u8 *)cmdResp_zigbJoinNWK,
 									 local_datsParam,
-									 800);
+									 800,
+									 datsReq_method);
 	}
 
 	if(true == resultREQ){
@@ -1047,6 +1201,7 @@ ZigB_NwkCreat(uint16_t PANID, uint8_t CHANNELS){
 #define loop_PANID		5	//指令索引
 #define loop_CHANNELS	6	//指令索引
 
+#if(ZNP_TARGET_DEVICE == ZNPDEVICE_CC2530)
 	const datsAttr_ZigbInit ZigbInit_dats[zigbNwkCrateCMDLen] = {
 
 		{	{0x41,0x00},	{0x00},					0x01,	{0xFE,0x06,0x41,0x80,0x02,0x02,0x00,0x02,0x06,0x03,0xC0},	0x0B,	500	},	//复位	
@@ -1060,6 +1215,21 @@ ZigB_NwkCreat(uint16_t PANID, uint8_t CHANNELS){
 		{	{0x26,0x00},	{0},					0x00,	{0xFE,0x01,0x45,0xC0,0x09,0x8D},							0x06,	800 },	//以既定角色入网/建立网络
 		{	{0x26,0x08}, 	{0xFC,0xFF,0x00}, 		0x03, 	{0xFE,0x01,0x66,0x08,0x00,0x6F}, 							0x06, 	20  },	//创建成功后关闭网络
 	};
+#elif(ZNP_TARGET_DEVICE == ZNPDEVICE_CC2538)
+	const datsAttr_ZigbInit ZigbInit_dats[zigbNwkCrateCMDLen] = {
+
+		{	{0x41,0x00},	{0x00}, 				0x01,	{0xFE,0x06,0x41,0x80,0x00,0x02,0x00,0x02,0x06,0x03,0xC2},	0x0B,	500 },	//复位 <--differ
+		{	{0x41,0x00},	{0x00}, 				0x01,	{0xFE,0x06,0x41,0x80,0x00,0x02,0x00,0x02,0x06,0x03,0xC2},	0x0B,	500 },	//复位 <--differ
+		{	{0x41,0x00},	{0x00}, 				0x01,	{0xFE,0x06,0x41,0x80,0x00,0x02,0x00,0x02,0x06,0x03,0xC2},	0x0B,	500 },	//复位 <--differ
+		{	{0x26,0x05},	{0x03,0x01,0x03},		0x03,	{0xFE,0x01,0x66,0x05,0x00,0x62},							0x06,	10	},	//寄存器初始化，参数清空
+		{	{0x41,0x00},	{0x00}, 				0x01,	{0xFE,0x06,0x41,0x80,0x00,0x02,0x00,0x02,0x06,0x03,0xC2},	0x0B,	500 },	//二次复位 <--differ
+		{	{0x27,0x02},	{0x34,0x12},			0x02,	{0xFE,0x01,0x67,0x02,0x00,0x64},							0x06,	10	},	//PAN_ID设置
+		{	{0x27,0x03},	{0x00,0x80,0x00,0x00},	0x04,	{0xFE,0x01,0x67,0x03,0x00,0x65},							0x06,	10	},	//信道寄存器配置
+		{	{0x26,0x05},	{0x87,0x01,0x00},		0x03,	{0xFE,0x01,0x66,0x05,0x00,0x62},							0x06,	10	},	//角色设置（协调器）
+		{	{0x26,0x00},	{0},					0x00,	{0xFE,0x01,0x45,0xC0,0x09,0x8D},							0x06,	800 },	//以既定角色入网/建立网络
+		{	{0x26,0x08},	{0xFC,0xFF,0x00},		0x03,	{0xFE,0x01,0x66,0x08,0x00,0x6F},							0x06,	20	},	//创建成功后关闭网络
+	};
+#endif
 	
 #define zigbNwkCrate_paramLen 100
 	u8 paramTX_temp[zigbNwkCrate_paramLen] = {0};
@@ -1144,7 +1314,7 @@ ZigB_datsRemoteRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 	u8 *ptr = NULL;
 	u8 loop = 0;
 	
-	uartToutDatsRcv rptr_uartDatsRcv;
+	sttUartRcv_rmoteDatComming rptr_uartDatsRcv;
 	portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
 
 	datsRX->datsType = zigbTP_NULL;
@@ -1181,7 +1351,7 @@ ZigB_datsRemoteRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 						}
 						else{
 						   
-							rptr_uartDatsRcv.dats[usr_memloc((u8 *)rptr_uartDatsRcv.dats, rptr_uartDatsRcv.datsLen, (u8 *)cmdRX[loop], 2)] = 0xFF;	//非指定数据则主动污染本段后，再向后复�?
+							rptr_uartDatsRcv.dats[usr_memloc((u8 *)rptr_uartDatsRcv.dats, rptr_uartDatsRcv.datsLen, (u8 *)cmdRX[loop], 2)] = 0xFF;	//非指定数据则主动污染本段后，再向后复柿
 							loop --;	//原段信息向后复查
 						}
 					}break;
@@ -1199,7 +1369,7 @@ ZigB_datsRemoteRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 						}
 						else{
 						   
-							rptr_uartDatsRcv.dats[usr_memloc((u8 *)rptr_uartDatsRcv.dats, rptr_uartDatsRcv.datsLen, (u8 *)cmdRX[loop], 2)] = 0xFF;	//非指定数据则主动污染本段后，再向后复�?
+							rptr_uartDatsRcv.dats[usr_memloc((u8 *)rptr_uartDatsRcv.dats, rptr_uartDatsRcv.datsLen, (u8 *)cmdRX[loop], 2)] = 0xFF;	//非指定数据则主动污染本段后，再向后复柿
 							loop --;	//原段信息向后复查
 						}
 					}break;
@@ -1309,113 +1479,66 @@ ZigB_remoteDatsSend(u16 DstAddr, //地址
 	uartZigbee_putDats(UART0, datsTX, datsTX_Len);
 }
 
-/*zigbee数据发送*/
-LOCAL bool IRAM_ATTR
-ZigB_datsTX(uint16 		DstAddr,
-			   uint8  	SrcPoint,
-			   uint8  	DstPoint,
-			   uint8 	ClustID,
-			   uint8  	dats[],
-			   uint8  	datsLen,
-			   bool  	responseIF){
-					 
-	const datsAttr_ZigbInit default_param = {{0x24,0x01},{0},0,{0},0,100};	//数据发送指令，默认响应时间不能太短，否则只能收到系统响应，无法收到远端响应
-	
+/*zigbee数据发送 - 非阻塞异步*/
+LOCAL bool ZigB_datsTX_ASY( uint16 	DstAddr,
+							   	uint8  	SrcPoint,
+							   	uint8  	DstPoint,
+							   	uint8 	ClustID,
+							   	uint8  	dats[],
+							   	uint8  	datsLen,
+							   	stt_dataRemoteReq bufQueue[],
+							   	uint8   BQ_LEN){
+
 	const u8 TransID = 13;
 	const u8 Option	 = 0;
 	const u8 Radius	 = 7;
-					 
-#define zigbTX_ASR_datsLen 3
-		  u8 ASR_dats[zigbTX_ASR_datsLen] = {0};
-	const u8 ASR_cmd[2] = {0x44,0x80};	//本地协议层确认发送响应
-	
-#define zigbTX_ASR_datsDstLen 3
-	const u8 ASR_datsDst[zigbTX_ASR_datsDstLen] = {0x03,0x02,0x03};	//远端接收确认，响应返回数据
 
-#define zigbTX_datsTransLen 80
-	uint8 buf_datsTX[zigbTX_datsTransLen] = {0};
-	uint8 buf_datsRX[zigbTX_datsTransLen] = {0};
-	uint8 datsRX_Len = 0;
+	const u8 cmd_dataReq[2] = {0x24, 0x01};
+	const u8 cmd_dataResp[2] = {0x44, 0x80};
 
-	uint8 datsTX[96] = {0};
-	uint8 datsTX_Len = 0;
+#define zigbTX_datsTransLen_ASR 80
+	uint8 buf_datsTX[zigbTX_datsTransLen_ASR] = {0};
+	uint8 buf_datsRX[zigbTX_datsTransLen_ASR] = {0};
 
-	datsZigb_reqGet *local_datsParam = (datsZigb_reqGet *)os_zalloc(sizeof(datsZigb_reqGet));
-	
-	bool TXCMP_FLG = false;
-	
-	datsAttr_ZigbTrans *local_datsRX = (datsAttr_ZigbTrans *)os_zalloc(sizeof(datsAttr_ZigbTrans));
-	
-	//接收帧填装，本地
-	ASR_dats[0] = 0x00;
-	ASR_dats[1] = SrcPoint;
-	ASR_dats[2] = TransID;
-	datsRX_Len = ZigB_TXFrameLoad(buf_datsRX, (u8 *)ASR_cmd, 2, ASR_dats, zigbTX_ASR_datsLen);
-	
-	//发送帧填装
-	buf_datsTX[0] = (uint8)((DstAddr & 0x00ff) >> 0);
-	buf_datsTX[1] = (uint8)((DstAddr & 0xff00) >> 8);
-	buf_datsTX[2] = DstPoint;
-	buf_datsTX[3] = SrcPoint;
-	buf_datsTX[4] = ClustID;
-	buf_datsTX[6] = TransID;
-	buf_datsTX[7] = Option;
-	buf_datsTX[8] = Radius;
-	buf_datsTX[9] = datsLen;
-	memcpy(&buf_datsTX[10],dats,datsLen);
+	u8 loop = 0;
 
-	datsTX_Len = ZigB_TXFrameLoad(datsTX, (u8 *)default_param.zigbInit_reqCMD, 2, (u8 *)buf_datsTX, datsLen + 10);
-	
-	/*本地发送，响应确认*/
-	TXCMP_FLG = zigb_datsRequest((u8 *)datsTX,
-								 datsTX_Len,
-								 (u8 *)ASR_cmd,
-								 local_datsParam,
-								 100);
+	for(loop = 0; loop < BQ_LEN; loop ++){
 
-	static u8 abnormalCount = 0; //异常次数统计
+		if(!bufQueue[loop].repeat_Loop){
 
-	if(false == TXCMP_FLG){
+			memset(bufQueue[loop].dataReq, 0, sizeof(u8) * 96);
+			memset(bufQueue[loop].dataResp, 0, sizeof(u8) * 8);
 
-		os_printf("[Tips_uartZigb]: remote dataTrans timeout with remoteNwkAddr: %04X.\n", DstAddr);
-		abnormalCount ++;
-	}
-	else{
+			//发送帧填装
+			buf_datsTX[0] = (uint8)((DstAddr & 0x00ff) >> 0);
+			buf_datsTX[1] = (uint8)((DstAddr & 0xff00) >> 8);
+			buf_datsTX[2] = DstPoint;
+			buf_datsTX[3] = SrcPoint;
+			buf_datsTX[4] = ClustID;
+			buf_datsTX[6] = TransID;
+			buf_datsTX[7] = Option;
+			buf_datsTX[8] = Radius;
+			buf_datsTX[9] = datsLen;
+			memcpy(&buf_datsTX[10], dats, datsLen);
+			bufQueue[loop].dataReq_Len = ZigB_TXFrameLoad(bufQueue[loop].dataReq, (u8 *)cmd_dataReq, 2, (u8 *)buf_datsTX, datsLen + 10);
 
-		if(local_datsParam->frameResp[4]){
+			//应答帧填装
+			buf_datsRX[0] = 0x00;
+			buf_datsRX[1] = SrcPoint;
+			buf_datsRX[2] = TransID;
 
-			os_printf("[Tips_uartZigb]: remote dataTrans failCode:%02X with remoteNwkAddr: %04X.\n", local_datsParam->frameResp[4],
-																									 DstAddr);
-			abnormalCount ++;
-		
-		}else{
+//			bufQueue[loop].dataResp_Len = 3;
+			bufQueue[loop].dataResp_Len = ZigB_TXFrameLoad(bufQueue[loop].dataResp, (u8 *)cmd_dataResp, 2, (u8 *)buf_datsRX, 3);
 
-			abnormalCount = 0;
+			bufQueue[loop].repeat_Loop = zigB_remoteDataTransASY_txReapt; //使能发送 10 次
+
+			return true;
 		}
 	}
-	
-	/*条件选择，远端（即接收端）响应确认*/
-	if(true == responseIF){
-	
-		if(TXCMP_FLG && ZigB_datsRemoteRX(local_datsRX, 100)){	/**注意调试合适响应时间**/
-		
-			if(local_datsRX->datsSTT.stt_MSG.Addr_from == DstAddr && !memcmp(local_datsRX->datsSTT.stt_MSG.dats,ASR_datsDst,zigbTX_ASR_datsDstLen)){
-			
-				TXCMP_FLG = true;
-			}else{
-			
-				TXCMP_FLG = false;
-			}
-		}else{
-		
-			TXCMP_FLG = false;
-		}
-	}
-	
-	if(local_datsRX)os_free(local_datsRX);
-	if(local_datsParam)os_free(local_datsParam);
-	
-	return TXCMP_FLG;
+
+	os_printf(">>>dataRM reqQ full.\n");
+
+	return false; 
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -1471,7 +1594,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 	nwkStateAttr_Zigb *zigbDevList_Head = (nwkStateAttr_Zigb *)os_zalloc(sizeof(nwkStateAttr_Zigb));	//节点设备信息链表 表头创建
 	const u16 zigbDetect_nwkNodeDev_Period = 1000;	//节点设备链表检测定时器更新周期（单位：ms）
-	const u8  zigDev_lifeCycle = 20;	//节点设备心跳周期（单位：s），周期内无心跳更新，节点设备将被判决死亡同时从链表中优化清除
+	const u8  zigDev_lifeCycle = 120;	//节点设备心跳周期（单位：s），周期内无心跳更新，节点设备将被判决死亡同时从链表中优化清除
 	nwkStateAttr_Zigb *ZigbDevNew_temp;	//节点设备信息缓存
 	nwkStateAttr_Zigb ZigbDevNew_tempInsert; //节点设备插入链表前预缓存
 
@@ -1607,15 +1730,17 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 					memset(datsKernel_TXbuffer, 0, sizeof(u8) * zigB_datsTX_bufferLen);
 					ZigB_sysCtrlFrameLoad(datsKernel_TXbuffer, datsTemp_zigbSysCtrl);
-					
-					TXCMP_FLG = ZigB_datsTX(0xFFFF, 
-											ZIGB_ENDPOINT_CTRLSYSZIGB,
-											ZIGB_ENDPOINT_CTRLSYSZIGB,
-											ZIGB_CLUSTER_DEFAULT_CULSTERID,
-											(u8 *)datsKernel_TXbuffer,
-											2 + datsTemp_zigbSysCtrl.datsLen, //命令长度 1 + 数据长度说明 1 + 数据长度 n 
-											false);
 
+					TXCMP_FLG = ZigB_datsTX_ASY(0xFFFF, 
+												ZIGB_ENDPOINT_CTRLSYSZIGB,
+												ZIGB_ENDPOINT_CTRLSYSZIGB,
+												ZIGB_CLUSTER_DEFAULT_CULSTERID,
+												(u8 *)datsKernel_TXbuffer,
+												2 + datsTemp_zigbSysCtrl.datsLen, //命令长度 1 + 数据长度说明 1 + 数据长度 n 
+												localZigbASYDT_bufQueueRemoteReq,
+												zigB_remoteDataTransASY_QbuffLen);
+					
+					vTaskDelay(10); 
 				}
 			}
 			
@@ -1643,13 +1768,22 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 								(datsTemp_zigbCtrlEachother[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
 							
-								TXCMP_FLG = ZigB_datsTX(0xFFFF, 
-														CTRLEATHER_PORT[loop],
-														CTRLEATHER_PORT[loop],
-														ZIGB_CLUSTER_DEFAULT_CULSTERID,
-														(u8 *)datsTemp_zigbCtrlEachother,
-														datsTempLen_zigbCtrlEachother,
-														false);
+//								TXCMP_FLG = ZigB_datsTX(0xFFFF, 
+//														CTRLEATHER_PORT[loop],
+//														CTRLEATHER_PORT[loop],
+//														ZIGB_CLUSTER_DEFAULT_CULSTERID,
+//														(u8 *)datsTemp_zigbCtrlEachother,
+//														datsTempLen_zigbCtrlEachother,
+//														false);
+
+								TXCMP_FLG = ZigB_datsTX_ASY(0xFFFF, 
+															CTRLEATHER_PORT[loop],
+															CTRLEATHER_PORT[loop],
+															ZIGB_CLUSTER_DEFAULT_CULSTERID,
+															(u8 *)datsTemp_zigbCtrlEachother,
+															datsTempLen_zigbCtrlEachother,
+															localZigbASYDT_bufQueueRemoteReq,
+															zigB_remoteDataTransASY_QbuffLen);
 							}
 						}
 					}
@@ -1680,11 +1814,25 @@ zigbeeDataTransProcess_task(void *pvParameters){
 	
 						if((rptr_S2Z.dats.dats_conv.dats[3] == FRAME_MtoSCMD_cmdConfigSearch) && //若为配置指令，则广播
 						   (rptr_S2Z.dats.dats_conv.datsFrom == datsFrom_ctrlLocal) ){	
-	
+						   
+						   	{
+
+								static u8 localCount_searchREQ = 4;
+								const  u8 localPeriod_nwkTrig = 4;
+
+								if(localCount_searchREQ < localPeriod_nwkTrig)localCount_searchREQ ++;
+								else{ //localPeriod_nwkTrig次搜索触发一次开放网络，取决于搜索码发送周期
+
+									localCount_searchREQ = 0;
+//									usrZigbNwkOpen_start(); //配置搜索时通知网内所有节点开放网络加入窗口
+								}
+						   	}
+
 							os_printf("[Tips_ZIGB-NWKmsg]: rcvMsg local cmd: %02X !!!\n", rptr_S2Z.dats.dats_conv.dats[3]);
 							zigb_nwkAddrTemp = 0xFFFF;
 							
-						}else{
+						}
+						else{
 	
 							nwkStateAttr_Zigb *infoZigbDevRet_temp = zigbDev_eptPutout_BYpsy(zigbDevList_Head, rptr_S2Z.dats.dats_conv.macAddr, DEVZIGB_DEFAULT, false);
 							if(NULL != infoZigbDevRet_temp){
@@ -1702,13 +1850,15 @@ zigbeeDataTransProcess_task(void *pvParameters){
 	
 							memset(datsKernel_TXbuffer, 0, sizeof(u8) * zigB_datsTX_bufferLen);
 							memcpy(datsKernel_TXbuffer, rptr_S2Z.dats.dats_conv.dats, rptr_S2Z.dats.dats_conv.datsLen);
-							TXCMP_FLG = ZigB_datsTX(zigb_nwkAddrTemp,	
-													ZIGB_ENDPOINT_CTRLNORMAL,
-													ZIGB_ENDPOINT_CTRLNORMAL,
-													ZIGB_CLUSTER_DEFAULT_CULSTERID,
-													(u8 *)datsKernel_TXbuffer,
-													rptr_S2Z.dats.dats_conv.datsLen,
-													false);
+						
+							TXCMP_FLG = ZigB_datsTX_ASY(zigb_nwkAddrTemp,	
+														ZIGB_ENDPOINT_CTRLNORMAL,
+														ZIGB_ENDPOINT_CTRLNORMAL,
+														ZIGB_CLUSTER_DEFAULT_CULSTERID,
+														(u8 *)datsKernel_TXbuffer,
+														rptr_S2Z.dats.dats_conv.datsLen,
+														localZigbASYDT_bufQueueRemoteReq,
+														zigB_remoteDataTransASY_QbuffLen);
 						}
 						
 					}break;
@@ -1730,7 +1880,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 			}
 	
 			/*>>>>>>zigbee数据处理<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
-			if(true == ZigB_datsRemoteRX(local_datsRX, 1)){
+			if(true == ZigB_datsRemoteRX(local_datsRX, 0)){
 	
 				memset(disp, 0, zigB_mThread_dispLen * sizeof(char));
 				memset(dats_MSG, 0, zigB_mThread_datsMSG_Len * sizeof(char));
@@ -1783,6 +1933,13 @@ zigbeeDataTransProcess_task(void *pvParameters){
 										datsFrom_obj = datsFrom_heartBtRemote;
 									
 									}break;
+
+									case DTMODEKEEPACESS_FRAMEHEAD_ONLINE:{
+
+										memcpy(devMAC_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[2]), DEVMAC_LEN); //数据包下标2-6为MAC地址,MAC前一位为校验码
+										datsFrom_obj = datsFrom_heartBtRemote;
+										
+									}break;
 								
 									default:{
 								
@@ -1791,17 +1948,30 @@ zigbeeDataTransProcess_task(void *pvParameters){
 										
 									}break;
 								}
-								
-								/*数据包log输出*/
-								os_printf("[Tips_ZIGB-ZBdats]: rcv msg(Len: %d) from MAC:<%02X %02X %02X %02X %02X>-nwkAddr[%04X].\n",
-										  local_datsRX->datsSTT.stt_MSG.datsLen,
-										  devMAC_Temp[0],
-										  devMAC_Temp[1],
-										  devMAC_Temp[2],
-										  devMAC_Temp[3],
-										  devMAC_Temp[4],
-										  local_datsRX->datsSTT.stt_MSG.Addr_from);
-			
+
+								if(!memcmp(debugLogOut_targetMAC ,devMAC_Temp, 5)){
+
+									/*数据包log输出*/
+									os_printf("[Tips_ZIGB-ZBdats]: rcv msg(Len: %d) from MAC:<%02X %02X %02X %02X %02X>-nwkAddr[%04X].\n",
+											  local_datsRX->datsSTT.stt_MSG.datsLen,
+											  devMAC_Temp[0],
+											  devMAC_Temp[1],
+											  devMAC_Temp[2],
+											  devMAC_Temp[3],
+											  devMAC_Temp[4],
+											  local_datsRX->datsSTT.stt_MSG.Addr_from);
+								}
+
+//								/*数据包log输出*/
+//								os_printf("[Tips_ZIGB-ZBdats]: rcv msg(Len: %d) from MAC:<%02X %02X %02X %02X %02X>-nwkAddr[%04X].\n",
+//										  local_datsRX->datsSTT.stt_MSG.datsLen,
+//										  devMAC_Temp[0],
+//										  devMAC_Temp[1],
+//										  devMAC_Temp[2],
+//										  devMAC_Temp[3],
+//										  devMAC_Temp[4],
+//										  local_datsRX->datsSTT.stt_MSG.Addr_from);
+
 								/*数据处理-节点设备链表更新*/
 								ZigbDevNew_temp = zigbDev_eptPutout_BYnwk(zigbDevList_Head, local_datsRX->datsSTT.stt_MSG.Addr_from, true);
 								if(NULL == ZigbDevNew_temp){	//判断是否为新增节点设备，是则更新生命周期，否则添加进链表
@@ -1826,7 +1996,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 								}
 			
 								/*数据处理-数据通过消息队列传送至socket通信主线程*/
-								if((local_datsRX->datsSTT.stt_MSG.dats[0] == ZIGB_FRAMEHEAD_CTRLLOCAL) || (local_datsRX->datsSTT.stt_MSG.dats[3] == FRAME_MtoSCMD_cmdConfigSearch)){ //本地配置指令添加 网络短地址 <供调试使用>
+								if((local_datsRX->datsSTT.stt_MSG.dats[0] == ZIGB_FRAMEHEAD_CTRLLOCAL) && (local_datsRX->datsSTT.stt_MSG.dats[3] == FRAME_MtoSCMD_cmdConfigSearch)){ //本地配置指令添加 网络短地址 <供调试使用>
 
 									local_datsRX->datsSTT.stt_MSG.dats[20] = (local_datsRX->datsSTT.stt_MSG.Addr_from & 0xFF00) >> 8;
 									local_datsRX->datsSTT.stt_MSG.dats[21] = (local_datsRX->datsSTT.stt_MSG.Addr_from & 0x00FF) >> 0;
@@ -1906,15 +2076,15 @@ zigbeeDataTransProcess_task(void *pvParameters){
 								
 									memset(datsKernel_TXbuffer, 0, sizeof(u8) * zigB_datsTX_bufferLen);
 									ZigB_sysCtrlFrameLoad(datsKernel_TXbuffer, datsTempTX_zigbSysCtrl);
-									
-									TXCMP_FLG = ZigB_datsTX(local_datsRX->datsSTT.stt_MSG.Addr_from, 
-															ZIGB_ENDPOINT_CTRLSYSZIGB,
-															ZIGB_ENDPOINT_CTRLSYSZIGB,
-															ZIGB_CLUSTER_DEFAULT_CULSTERID,
-															(u8 *)datsKernel_TXbuffer,
-															2 + datsTempTX_zigbSysCtrl.datsLen, //命令长度 1 + 数据长度说明 1 + 数据长度 n 
-															false);
-								
+
+									TXCMP_FLG = ZigB_datsTX_ASY(local_datsRX->datsSTT.stt_MSG.Addr_from, 
+																ZIGB_ENDPOINT_CTRLSYSZIGB,
+																ZIGB_ENDPOINT_CTRLSYSZIGB,
+																ZIGB_CLUSTER_DEFAULT_CULSTERID,
+																(u8 *)datsKernel_TXbuffer,
+																2 + datsTempTX_zigbSysCtrl.datsLen, //命令长度 1 + 数据长度说明 1 + 数据长度 n 
+																localZigbASYDT_bufQueueRemoteReq,
+																zigB_remoteDataTransASY_QbuffLen);
 								}
 
 							}break;
@@ -1980,6 +2150,68 @@ zigbeeDataTransProcess_task(void *pvParameters){
 			ZigB_nwkReconnect();
 		}
 
+		/*>>>>>>zigb非阻塞远端数据传输<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
+		{
+
+			portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
+			sttUartRcv_rmDatsReqResp rptr_uartDatsRcv;
+
+			u8 loop_Insert 		= 0;
+
+			do{
+
+				xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_rmDataReqResp, (void *)&rptr_uartDatsRcv, (portTickType) 0);
+				if(xMsgQ_rcvResult == pdTRUE){
+
+//					os_printf(">>>:Qcome: Len-%02d, H-%02X, T-%02X.\n", rptr_uartDatsRcv.datsLen, rptr_uartDatsRcv.dats[0], rptr_uartDatsRcv.dats[rptr_uartDatsRcv.datsLen - 1]);
+
+					while(loop_Insert < zigB_remoteDataTransASY_QbuffLen){
+
+						if( localZigbASYDT_bufQueueRemoteReq[loop_Insert].repeat_Loop){
+
+							if(!memcmp(rptr_uartDatsRcv.dats, localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataResp, localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataResp_Len)){
+
+								localZigbASYDT_bufQueueRemoteReq[loop_Insert].repeat_Loop = 0; //有正确的应答响应，提前结束数据发送
+								memcpy(&localZigbASYDT_bufQueueRemoteReq[loop_Insert], &localZigbASYDT_bufQueueRemoteReq[loop_Insert + 1], (zigB_remoteDataTransASY_QbuffLen - loop_Insert - 1) * sizeof(stt_dataRemoteReq));
+
+//								os_printf("bingo.\n");
+
+								break; //当前可用应答使用完毕，一次应答只能用一次，不能重复共用
+								
+							}else{
+
+//								os_printf(">>>:mShud: Len-%02d, h-%02X, t-%02X.\n", localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataResp_Len, localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataResp[0], localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataResp[localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataResp_Len - 1]);
+							}
+						}
+
+						loop_Insert ++;	
+					}
+
+					loop_Insert = 0;  //谨记清零,单次应答只用单次取消指令下达
+				}
+				
+			}
+			while(xMsgQ_rcvResult == pdTRUE);
+
+			while(loop_Insert < zigB_remoteDataTransASY_QbuffLen){
+
+				if(!localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataReqPeriod && localZigbASYDT_bufQueueRemoteReq[loop_Insert].repeat_Loop){
+				
+					localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataReqPeriod = zigB_remoteDataTransASY_txPeriod; //轮发周期更新
+					localZigbASYDT_bufQueueRemoteReq[loop_Insert].repeat_Loop --; //轮发次数更新
+				
+					uartZigbee_putDats(UART0, localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataReq, localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataReq_Len);
+					vTaskDelay(zigB_remoteDataTransASY_txUartOnceWait);
+
+					if(!localZigbASYDT_bufQueueRemoteReq[loop_Insert].repeat_Loop){
+
+						os_printf("preFail warning, nwkAddr<0x%02X%02X>.\n", localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataReq[5], localZigbASYDT_bufQueueRemoteReq[loop_Insert].dataReq[4]);
+					}
+				}
+				
+				loop_Insert ++;
+			}
+		}
 		vTaskDelay(1);
 	}
 
@@ -1996,7 +2228,7 @@ zigbee_mainThreadStart(void){
 	appMsgQueueCreat_timeStampGet();
 	appMsgQueueCreat_zigbFunRemind();
 	
-	xReturn = xTaskCreate(zigbeeDataTransProcess_task, "Process_Zigbee", 1536, (void *)NULL, 4, &pxTaskHandle_threadZigbee);
+	xReturn = xTaskCreate(zigbeeDataTransProcess_task, "Process_Zigbee", 2048, (void *)NULL, 4, &pxTaskHandle_threadZigbee);
 	os_printf("\nppxTaskHandle_threadZigbee is %d\n", pxTaskHandle_threadZigbee);
 }
 

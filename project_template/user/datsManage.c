@@ -6,15 +6,17 @@
 
 #include "usrInterface_Tips.h"
 
-const u8 serverRemote_IP_Lanbon[4] = {47,52,5,108}; //47,52,5,108 香港 //112,124,61,191 中国
+const u8 debugLogOut_targetMAC[5] = {0x20, 0x18, 0x12, 0x34, 0x56};
+const u8 serverRemote_IP_Lanbon[4] = {10, 0, 0, 224};
+//const u8 serverRemote_IP_Lanbon[4] = {47,52,5,108}; //47,52,5,108 香港 //112,124,61,191 中国
 
 stt_scenarioOprateDats scenarioOprateDats = {0};
 
 //u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0x1A, 0x1B, 0x1C}; //互控端口位
 u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0, 0, 0}; //互控端口位
 
-u8 COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT_NUMTAIL] = {0};
-stt_scenarioOprateDats COLONY_DATAMANAGE_SCENE = {0};
+u8 COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT_NUMTAIL] = {0}; //主机管理表-互控状态管理
+stt_scenarioOprateDats COLONY_DATAMANAGE_SCENE = {0}; //主机管理表-场景控制状态管理
 
 u8 MACSTA_ID[DEV_MAC_LEN] = {0};
 u8 MACAP_ID[DEV_MAC_LEN] = {0};

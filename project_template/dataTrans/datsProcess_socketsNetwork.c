@@ -68,7 +68,7 @@ frame_Check(unsigned char frame_temp[], u8 check_num){
 LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_S2Z(void){
 
-	xMsgQ_Socket2Zigb = xQueueCreate(20, sizeof(stt_threadDatsPass));
+	xMsgQ_Socket2Zigb = xQueueCreate(30, sizeof(stt_threadDatsPass));
 	if(0 == xMsgQ_Socket2Zigb)return OK;
 	else return FAIL;
 }
@@ -76,8 +76,8 @@ appMsgQueueCreat_S2Z(void){
 LOCAL STATUS ICACHE_FLASH_ATTR
 appMsgQueueCreat_datsFromSocket(void){
 
-	xMsgQ_datsFromSocketPort = xQueueCreate(20, sizeof(stt_socketDats));
-	if(0 == xMsgQ_Socket2Zigb)return OK;
+	xMsgQ_datsFromSocketPort = xQueueCreate(30, sizeof(stt_socketDats));
+	if(0 == xMsgQ_datsFromSocketPort)return OK;
 	else return FAIL;
 }
 
@@ -153,6 +153,8 @@ sockets_datsSend(socket_OBJ sObj, u8 dats[], u16 datsLen){
 			case Obj_tcpRemote_B:	return TCPremoteB_datsSend(dats, datsLen);
 			default:return FAIL;
 		}
+
+		vTaskDelay(2); //socket通畅通信间隔 20ms
 	}
 	else{
 
@@ -292,12 +294,14 @@ socketsDataTransProcess_task(void *pvParameters){
 
 							mySocketUDPremote_B_serverChange(&rptr_socketDats.dats[6]);
 
+							repeatTX_buff[11] = status_actuatorRelay;
+
 							repeatTX_buff[14] = (u8)(nwkZigb_currentPANID >> 8);
 							repeatTX_buff[15] = (u8)(nwkZigb_currentPANID >> 0);
 
 							repeatTX_buff[20] = 0x00;  //协调器网络短地址标记 <调试专用>
 							repeatTX_buff[21] = 0x00;  //协调器网络短地址标记 <调试专用>
-		
+
 							specialCMD_IF		= false;
 							socketRespond_IF	= true;
 						
@@ -793,19 +797,47 @@ socketsDataTransProcess_task(void *pvParameters){
 						mptr_S2Z.msgType = conventional;
 						memcpy(mptr_S2Z.dats.dats_conv.dats, rptr_socketDats.dats, rptr_socketDats.datsLen);
 						mptr_S2Z.dats.dats_conv.datsLen = rptr_socketDats.datsLen;
-						memcpy(mptr_S2Z.dats.dats_conv.macAddr, &rptr_socketDats.dats[3], DEV_MAC_LEN);
-//						memcpy(mptr_S2Z.dats.dats_conv.macAddr, &rptr_socketDats.dats[3 + 1], DEV_MAC_LEN);	//服务器帮忙往前挪了一个字节
-						mptr_S2Z.dats.dats_conv.devType = rptr_socketDats.dats[rptr_socketDats.datsLen - 3];
-						mptr_S2Z.dats.dats_conv.dats[0] = ZIGB_FRAMEHEAD_HEARTBEAT;
 						mptr_S2Z.dats.dats_conv.datsFrom = datsFrom_heartBtRemote;
 
-						os_printf("[Tips_NWK-SKdats]: node_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>.\n", 
-								  mptr_S2Z.dats.dats_conv.macAddr[0],
-								  mptr_S2Z.dats.dats_conv.macAddr[1],
-								  mptr_S2Z.dats.dats_conv.macAddr[2],
-								  mptr_S2Z.dats.dats_conv.macAddr[3],
-								  mptr_S2Z.dats.dats_conv.macAddr[4],
-								  rptr_socketDats.command);
+						switch(rptr_socketDats.dats[0]){
+
+							case FRAME_HEAD_HEARTB:{
+
+								memcpy(mptr_S2Z.dats.dats_conv.macAddr, &rptr_socketDats.dats[3], DEV_MAC_LEN);
+//								memcpy(mptr_S2Z.dats.dats_conv.macAddr, &rptr_socketDats.dats[3 + 1], DEV_MAC_LEN); //服务器帮忙往前挪了一个字节
+								mptr_S2Z.dats.dats_conv.devType = rptr_socketDats.dats[rptr_socketDats.datsLen - 3];
+								mptr_S2Z.dats.dats_conv.dats[0] = ZIGB_FRAMEHEAD_HEARTBEAT;
+								
+							}break;
+
+							case DTMODEKEEPACESS_FRAMEHEAD_ONLINE:{
+
+								memcpy(mptr_S2Z.dats.dats_conv.macAddr, &rptr_socketDats.dats[2], DEV_MAC_LEN);
+								mptr_S2Z.dats.dats_conv.devType = DEVZIGB_DEFAULT;
+
+							}break;
+
+							default:{}break;
+						}
+
+						if(!memcmp(debugLogOut_targetMAC ,mptr_S2Z.dats.dats_conv.macAddr, 5)){
+
+							os_printf("[Tips_NWK-SKdats]: node_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>.\n", 
+									  mptr_S2Z.dats.dats_conv.macAddr[0],
+									  mptr_S2Z.dats.dats_conv.macAddr[1],
+									  mptr_S2Z.dats.dats_conv.macAddr[2],
+									  mptr_S2Z.dats.dats_conv.macAddr[3],
+									  mptr_S2Z.dats.dats_conv.macAddr[4],
+									  rptr_socketDats.command);							
+						}
+
+//						os_printf("[Tips_NWK-SKdats]: node_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>.\n", 
+//								  mptr_S2Z.dats.dats_conv.macAddr[0],
+//								  mptr_S2Z.dats.dats_conv.macAddr[1],
+//								  mptr_S2Z.dats.dats_conv.macAddr[2],
+//								  mptr_S2Z.dats.dats_conv.macAddr[3],
+//								  mptr_S2Z.dats.dats_conv.macAddr[4],
+//								  rptr_socketDats.command); 
 
 						xQueueSend(xMsgQ_Socket2Zigb, (void *)&mptr_S2Z, 0);
 						
@@ -880,25 +912,61 @@ socketsDataTransProcess_task(void *pvParameters){
 
 							if(nwkInternetOnline_IF){ //网关正常则向远端服务器发送心跳
 
-								memcpy(datsTX_buff, rptr_Z2S.dats.dats_conv.dats, rptr_Z2S.dats.dats_conv.datsLen);
-								datsTX_buff[0] = FRAME_HEAD_HEARTB;
-								datsTX_Len = dataHeartBeatLength_objSERVER;
-								sockets_datsSend(Obj_udpRemote_B, datsTX_buff, datsTX_Len);
-//								printf_datsHtoA("[Tips_NWK-ZBmsg]: zb_HB datsSend is:", datsTX_buff, datsTX_Len);
+								switch(rptr_Z2S.dats.dats_conv.dats[0]){
+									
+									case FRAME_HEAD_HEARTB:{
+										
+										memcpy(datsTX_buff, rptr_Z2S.dats.dats_conv.dats, rptr_Z2S.dats.dats_conv.datsLen);
+										datsTX_buff[0] = FRAME_HEAD_HEARTB;
+										datsTX_Len = dataHeartBeatLength_objSERVER;
+										sockets_datsSend(Obj_udpRemote_B, datsTX_buff, datsTX_Len);
+//										printf_datsHtoA("[Tips_NWK-ZBmsg]: zb_HB datsSend is:", datsTX_buff, datsTX_Len);
+		
+									}break;
 
-							}else{ //网络离线则由网关自行回复给子设备心跳
+									case DTMODEKEEPACESS_FRAMEHEAD_ONLINE:{
+
+										memcpy(datsTX_buff, rptr_Z2S.dats.dats_conv.dats, rptr_Z2S.dats.dats_conv.datsLen);
+										datsTX_buff[0] = DTMODEKEEPACESS_FRAMEHEAD_ONLINE;
+										datsTX_Len = rptr_Z2S.dats.dats_conv.datsLen;
+//										os_printf("[Tips_socketUDP_B]: resTX:%d.\n", sockets_datsSend(Obj_udpRemote_B, datsTX_buff, datsTX_Len));
+										sockets_datsSend(Obj_udpRemote_B, datsTX_buff, datsTX_Len);
+
+									}break;
+
+									default:{}break;
+								}
+
+							}
+							else{ //网络离线则由网关自行回复给子设备心跳
 
 								stt_threadDatsPass *mptrTemp_S2Z = &rptr_Z2S;
 
-								if(rptr_Z2S.dats.dats_conv.dats[2] == FRAME_HEARTBEAT_cmdEven){ //奇数心跳包
+								switch(rptr_Z2S.dats.dats_conv.dats[0]){
+									
+									case FRAME_HEAD_HEARTB:{
 
-									mptrTemp_S2Z->dats.dats_conv.dats[0] = ZIGB_OFFLINEFRAMEHEAD_HEARTBEAT;
-									xQueueSend(xMsgQ_Socket2Zigb, (void *)mptrTemp_S2Z, 0);
+										if(rptr_Z2S.dats.dats_conv.dats[2] == FRAME_HEARTBEAT_cmdEven){ //奇数心跳包
+										
+											mptrTemp_S2Z->dats.dats_conv.dats[0] = ZIGB_OFFLINEFRAMEHEAD_HEARTBEAT;
+											xQueueSend(xMsgQ_Socket2Zigb, (void *)mptrTemp_S2Z, 0);
+										
+										}else
+										if(rptr_Z2S.dats.dats_conv.dats[2] == FRAME_HEARTBEAT_cmdOdd){ //偶数心跳包
+										
+										
+										}
+										
+									}break;
 								
-								}else
-								if(rptr_Z2S.dats.dats_conv.dats[2] == FRAME_HEARTBEAT_cmdOdd){ //偶数心跳包
+									case DTMODEKEEPACESS_FRAMEHEAD_ONLINE:{
 
+										mptrTemp_S2Z->dats.dats_conv.dats[0] = DTMODEKEEPACESS_FRAMEHEAD_OFFLINE;
+										xQueueSend(xMsgQ_Socket2Zigb, (void *)mptrTemp_S2Z, 0);
 
+									}break;
+								
+									default:{}break;
 								}
 							}
 
@@ -914,6 +982,7 @@ socketsDataTransProcess_task(void *pvParameters){
 				/*子设备列表请求数据中转*/
 				case listDev_query:{
 
+					
 
 				}break;
 

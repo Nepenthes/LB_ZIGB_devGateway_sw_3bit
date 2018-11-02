@@ -64,6 +64,8 @@ LOCAL os_timer_t usrTimer_reference;
 extern xQueueHandle xMsgQ_zigbFunRemind;
 extern xQueueHandle xMsgQ_devUpgrade;
 
+extern stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen];
+
 void devConnectAP_autoInit(char P_ssid[32], char P_password[64]);
 void somartConfig_complete(void);
 
@@ -428,7 +430,7 @@ timerFunCB_usrReference(void *para){
 	const u16 period_1second = 1000;
 	static u16 counter_1second = 0;
 
-	const u8 period_nodeSystimeSynchronous = 5; //子节点系统时间同步周期 单位：s
+	const u8 period_nodeSystimeSynchronous = 10; //子节点系统时间同步周期 单位：s
 	static u8 counter_nodeSystimeSynchronous = 0;
 
 	const u8 period_localSystimeZigbAdjust = 20; //本地系统时间同步周期 单位：s
@@ -500,7 +502,10 @@ timerFunCB_usrReference(void *para){
 	}
 
 	/*其它1ms定时业务*/
-	
+	for(loop = 0; loop < zigB_remoteDataTransASY_QbuffLen; loop ++){
+
+		if(localZigbASYDT_bufQueueRemoteReq[loop].dataReqPeriod)localZigbASYDT_bufQueueRemoteReq[loop].dataReqPeriod --;
+	}
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -584,7 +589,7 @@ void user_init(void)
 
 	/*Sockets建立不能进行二次封装，否则影响smartlink功能，导致重启*/
 	mySocketUDPlocal_A_buildInit();	//Socket建立_本地UDP_A
-	mySocketUDPremote_B_buildInit((u8 *)serverRemote_IP_Lanbon);//Socket建立_远端服务器UDP_B
+	mySocketUDPremote_B_buildInit();//Socket建立_远端服务器UDP_B
 //	tcpRemote_A_connectStart();	//Socket建立_远端TCP_A
 //	tcpRemote_B_connectStart();	//Socket建立_远端TCP_B
 
@@ -603,6 +608,7 @@ void user_init(void)
 
 //	xTaskCreate(myProcess_task, "myProcess_task", 1024, NULL, 3, NULL);
 
-	os_printf("reserve heap : %d. \n", system_get_free_heap_size());
+	os_printf("Hellow world!!!\n");
+//	os_printf("reserve heap : %d. \n", system_get_free_heap_size());
 }
 
