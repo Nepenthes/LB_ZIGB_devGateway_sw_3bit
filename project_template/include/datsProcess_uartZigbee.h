@@ -27,6 +27,8 @@
 #define CTRLEATHER_PORT_NUMSTART		0x10 //互控端口起始编号
 #define CTRLEATHER_PORT_NUMTAIL			0xFF //互控端口结束编号
 
+#define CTRLSECENARIO_RESPCMD_SPECIAL	0xCE //场景控制回复专用数据（取消后摇）
+
 #define ZIGB_ENDPOINT_CTRLSECENARIO		12 //场景集群控制专用端口
 #define ZIGB_ENDPOINT_CTRLNORMAL		13 //常规数据转发专用端口
 #define ZIGB_ENDPOINT_CTRLSYSZIGB		14 //zigb系统交互专用端口
@@ -43,14 +45,18 @@
 #define ZIGB_SYSCMD_DEVHOLD					0x6A //zigb系统指令，设备网络挂起(用于更换网关，网管本身用不到)
 #define ZIGB_SYSCMD_EACHCTRL_REPORT			0x6B //zigb系统指令，子设备向网关汇报互控触发状态
 #define ZIGB_SYSCMD_COLONYPARAM_REQPERIOD	0x6C //zigb系统指令，集群控制本地受控状态周期性轮询应答(包括场景和互控)
+#define ZIGB_SYSCMD_DATATRANS_HOLD			0x6D //zigb系统指令，主动挂起周期性通信一段时间，之后恢复
 
-#define zigB_remoteDataTransASY_QbuffLen 		100 //本地非阻塞远端数据请求，缓存队列
-#define zigB_remoteDataTransASY_txPeriod		300 //单条数据请求周期	单位：ms
+#define zigB_remoteDataTransASY_QbuffLen 		60  //本地非阻塞远端数据请求，缓存队列
+#define zigB_remoteDataTransASY_txPeriod		200 //单条数据请求周期	单位：ms
 #define zigB_remoteDataTransASY_txReapt			10	//单条数据请求重复次数
-#define zigB_remoteDataTransASY_txUartOnceWait	4	//异步串口通信远端数据请求单次等待时间 单位：ms
+#define zigB_remoteDataTransASY_txUartOnceWait	4	//异步串口通信远端数据请求单次等待时间 单位：10ms
 
-extern xQueueHandle xMsgQ_Zigb2Socket;
-extern xQueueHandle xMsgQ_zigbFunRemind;
+#define zigB_ScenarioCtrlDataTransASY_opreatOnceNum		10	//场景控制逻辑业务单轮操作单位数目(大包场次分批次异步发送，单轮/单批次数目)
+#define zigB_ScenarioCtrlDataTransASY_QbuffLen 			100 //本地非阻塞远端场景控制数据请求，缓存队列
+#define zigB_ScenarioCtrlDataTransASY_txPeriod			300 //单条场景控制数据请求周期	单位：ms
+#define zigB_ScenarioCtrlDataTransASY_txReapt			20	//单条场景控制数据请求重复次数
+#define zigB_ScenarioCtrlDataTransASY_txUartOnceWait	4	//异步串口通信远端场景控制数据请求单次等待时间 单位：10ms
 
 typedef enum{
 
@@ -60,6 +66,7 @@ typedef enum{
 	msgFun_portCtrlEachoRegister, //互控端点（通讯簇）注册
 	msgFun_panidRealesNwkCreat, //本地zigb主机panid更新
 	msgFun_scenarioCrtl, //场景集群控制
+	msgFun_dtPeriodHoldPst //使子节点设备周期性远端通信挂起
 }enum_zigbFunMsg;
 
 typedef struct{
@@ -93,6 +100,11 @@ typedef struct{
 	u8 datsLen;
 }sttUartRcv_rmDatsReqResp;
 
+typedef struct{
+
+	u16 respNwkAddr;
+}sttUartRcv_scenarioCtrlResp;
+
 #define dataRemote_RESPLEN 8
 typedef struct{
 
@@ -104,6 +116,18 @@ typedef struct{
 	u16 dataReqPeriod;	//指令下达单次发送周期
 	u8 	repeat_Loop;	//指令下达发送重复次数
 }stt_dataRemoteReq;
+
+#define dataScenario_RESPLEN 8
+typedef struct{
+
+	u8 	dataReq[16];
+	u8 	dataReq_Len;
+	u16 dataRespNwkAddr;
+
+	u16 dataReqPeriod;	//指令下达单次发送周期
+	u8 	repeat_Loop:7;	//指令下达发送重复次数
+	u8 	scenarioOpreatCmp_flg:1; //单元场景操作成功完成标志
+}stt_dataScenarioReq;
 
 typedef struct{
 
@@ -125,7 +149,7 @@ typedef struct ZigB_nwkState_Form{
 	u16	nwkAddr;				//网络短地址
 	u8	macAddr[DEVMAC_LEN];	//设备MAC地址
 	u8	devType;				//设备类型
-	u16	onlineDectect_LCount;	//心跳技术——实时更新
+	u16	onlineDectect_LCount;	//心跳计时——实时更新
 	
 	struct ZigB_nwkState_Form *next;
 }nwkStateAttr_Zigb;
@@ -175,6 +199,9 @@ typedef struct ZigBAttr_datsRX{
 	datsZigb_sttType datsType:4;	//数据类型，是远端消息数据，还是系统协议栈数据
 	ZigbAttr_datsZigbRX datsSTT;
 }datsAttr_ZigbTrans;
+
+extern xQueueHandle xMsgQ_Zigb2Socket;
+extern xQueueHandle xMsgQ_zigbFunRemind;
 
 extern u16 nwkZigb_currentPANID;
 extern u16 sysZigb_random;

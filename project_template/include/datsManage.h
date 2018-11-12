@@ -61,7 +61,7 @@ typedef struct{
 
 	u8 	serverIP_default[4];	//默认服务器IP
 
-	u8  swTimer_Tab[3 * 4];	//定时表
+	u8  swTimer_Tab[3 * 8];	//定时表
 	u8  swDelay_flg; //延时及绿色模式标志
 	u8  swDelay_periodCloseLoop; //绿色模式周期
 	u8  devNightModeTimer_Tab[3 * 2]; //夜间模式定时表
@@ -142,6 +142,57 @@ typedef struct STTthreadDatsPass{	//数据传输进程消息数据类型
 	threadDP_msgType msgType;		//数据类型
 	stt_threadDatsPass_dats dats;	//数据实体
 }stt_threadDatsPass;
+
+/*=======================↓↓↓定时询访机制专用数据结构↓↓↓=============================*/
+typedef struct agingDataSet_bitHold{ //使用指针强转时注意，agingCmd_swOpreat对应单字节最低位bit0,依此类推
+	u8 agingCmd_swOpreat:1; //时效_开关状态操作 -bit0
+	u8 agingCmd_devLock:1; //时效_设备锁设置 -bit1
+	u8 agingCmd_delaySetOpreat:1; //时效_延时设置 -bit2
+	u8 agingCmd_greenModeSetOpreat:1; //时效_绿色模式设置 -bit3
+	u8 agingCmd_timerSetOpreat:1; //时效_定时设置 -bit4
+	u8 agingCmd_nightModeSetOpreat:1; //时效_夜间模式设置 -bit5
+	u8 agingCmd_bkLightSetOpreat:1; //时效_背光灯设置 -bit6
+	u8 agingCmd_devResetOpreat:1; //时效_开关恢复出厂操作 -bit7
+	
+	u8 agingCmd_horsingLight:1; //时效_跑马灯设置 -bit0
+	u8 statusRef_bitReserve:7; //时效_bit保留 -bit1...bit7
+	
+	u8 agingCmd_byteReserve[4];	//5字节占位保留
+	
+}stt_agingDataSet_bitHold; //standard_length = 6Bytes
+
+typedef struct swDevStatus_reference{
+
+	u8 statusRef_swStatus:3; //状态_设备开关状态 -bit0...bit2
+	u8 statusRef_reserve:2; //状态_reserve -bit3...bit4
+	u8 statusRef_swPush:3; //状态_推送占位 -bit5...bit7
+	
+	u8 statusRef_timer:1; //状态_定时器运行 -bit0
+	u8 statusRef_devLock:1; //状态_设备锁 -bit1
+	u8 statusRef_delay:1; //状态_延时运行 -bit2
+	u8 statusRef_greenMode:1; //状态_绿色模式运行 -bit3
+	u8 statusRef_nightMode:1; //状态_夜间模式运行 -bit4
+	u8 statusRef_horsingLight:1; //状态_跑马灯运行 -bit5
+	u8 statusRef_bitReserve:2;  //状态__reserve -bit6...bit7
+	
+	u8 statusRef_byteReserve[2];   //状态__reserve -bytes2...3
+	
+}stt_swDevStatusReference_bitHold; //standard_length = 4Bytes
+
+typedef struct dataPonit{
+
+	stt_agingDataSet_bitHold 			devAgingOpreat_agingReference; //时效操作占位, 6Bytes
+	stt_swDevStatusReference_bitHold	devStatus_Reference; //设备状态占位, 4Bytes 			
+	u8 						 			devData_timer[24]; //定时器数据, 24Bytes
+	u8									devData_delayer; //延时数据, 1Bytes
+	u8									devData_delayUpStatus; //延时到达时,开关响应状态 1Bytes
+	u8									devData_greenMode; //绿色模式数据, 1Bytes
+	u8									devData_nightMode[6]; //夜间模式数据, 6Bytes
+	u8									devData_bkLight[2]; //背光灯颜色, 2Bytes
+	u8									devData_devReset; //开关复位数据, 1Bytes
+	
+}stt_devOpreatDataPonit; //standard_length = 46Bytes
+/*=======================↑↑↑定时询访机制专用数据结构↑↑↑=============================*/
 
 extern const u8 debugLogOut_targetMAC[5];
 extern const u8 serverRemote_IP_Lanbon[4];

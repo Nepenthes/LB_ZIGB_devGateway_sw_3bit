@@ -130,9 +130,9 @@ myTCP_DNSfound_funCB(const char *name, ip_addr_t *ipaddr, void *arg){
 	}
 
 	os_printf("[Tips_socketTCP_B]: dns found is: %d.%d.%d.%d\n", *((uint8 *)&ipaddr->addr + 0), 
-															  *((uint8 *)&ipaddr->addr + 1),
-															  *((uint8 *)&ipaddr->addr + 2),
-															  *((uint8 *)&ipaddr->addr + 3));
+																  *((uint8 *)&ipaddr->addr + 1),
+																  *((uint8 *)&ipaddr->addr + 2),
+																  *((uint8 *)&ipaddr->addr + 3));
 	
 	if(tcp_remoteB_serverIP.addr == 0 && ipaddr->addr != 0){
 

@@ -149,7 +149,7 @@ devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSav
 
 		case obj_swTimer_Tab:{
 
-				memcpy(dats_Temp.swTimer_Tab, datsSave_Temp.swTimer_Tab, 3 * 4);
+				memcpy(dats_Temp.swTimer_Tab, datsSave_Temp.swTimer_Tab, 3 * 8);
 			
 			}break;
 

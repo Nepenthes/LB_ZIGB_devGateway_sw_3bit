@@ -86,6 +86,7 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 		    (*(pdata + 8) == DTMODEKEEPACESS_FRAMECMD_ASR || *(pdata + 8) == DTMODEKEEPACESS_FRAMECMD_PST) ){
 
 //			os_printf("pag mark.\n");
+//			os_printf(">>>keepAcessPag get:%d.\n", len);
 
 			mptr_socketDats.portObj = Obj_udpRemote_B;
 			mptr_socketDats.command = *(pdata + 8);
@@ -146,13 +147,18 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 				switch(*(pdata + 3)){
 
 					case FRAME_MtoZIGBCMD_cmdCfg_scenarioCtl:{ //>>>场景控制<<<
+
+						u8 local_scenarioRespond[11] = {0};
+						memcpy(&local_scenarioRespond[0], pdata, 9); //前段复制
+						memcpy(&local_scenarioRespond[9], &pdata[len - 2], 2); //后端复制
+						espconn_sent(&infoTemp_connUDP_remote_B, local_scenarioRespond, 11); //向服务器回码
 					
-						u16 dats_Len = (u16)(*(pdata + 1)) * 6 + 10; //实际帧长（数据包帧长为操作开关个数）
+						u16 dats_Len = (u16)(*(pdata + 1)) * 6 + 11; //实际帧长（数据包帧长为操作开关个数）
 						
 						if((dats_Len == len) && !memcmp(&MACSTA_ID[1], pdata + 4, 5)){ //特殊指令 MAC从第五字节开始
 						
-							u8 loop = 0;
-							u8 pointTemp = 0;
+							u16 loop = 0;
+							u16 pointTemp = 0;
 						
 							scenarioOprateDats.devNode_num = *(pdata + 1); //集群数量填装
 							scenarioOprateDats.scenarioCtrlOprate_IF = true; //场景集群操作使能
@@ -173,6 +179,8 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 							mptr_socketDats.heartBeat_IF = false;	//不是心跳包
 							
 							xQueueSend(xMsgQ_datsFromSocketPort, (void *)&mptr_socketDats, 0);
+
+//							os_printf("scenario unitNum: %d.\n", COLONY_DATAMANAGE_SCENE.devNode_num);
 						}
 						else{ //打印错误分析
 
@@ -197,6 +205,10 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 				}
 			}
 		}
+		else{
+
+			os_printf(">>>data parsing fail with length:%d.\n", len);
+		}
 
 		if(dataCorrect_FLG){
 
@@ -215,6 +227,10 @@ UDPremoteB_datsSend(u8 dats[], u16 datsLen){
 	if(res){
 
 		os_printf("[Tips_socketUDP_B]: msg send fail, res:%d, socketInfoptr:%X, dataPtr:%X, dataLen:%d\n", res, &infoTemp_connUDP_remote_B, dats, datsLen);
+
+		espconn_disconnect(&infoTemp_connUDP_remote_B); //socket重连
+		espconn_delete(&infoTemp_connUDP_remote_B);
+		mySocketUDPremote_B_buildInit();
 	}
 
 //	espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);

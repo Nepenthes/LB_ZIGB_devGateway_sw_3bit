@@ -34,7 +34,14 @@ LOCAL xTaskHandle pxTaskHandle_threadNWK;
 LOCAL internet_connFLG = false;	//STA网络在线标志
 
 LOCAL os_timer_t timer_heartBeatKeep;
-const uint32 timer_heartBeatKeep_Period = 1000;
+
+u8 heartbeat_Period = (u8)(PERIOD_HEARTBEAT_ASR / timer_heartBeatKeep_Period);	//周期性数据传输间隔定义
+u8 heartbeat_Cnt = 0;	//心跳包周期计数
+
+stt_devOpreatDataPonit dev_currentDataPoint = {0}; //周期询访数据点
+stt_agingDataSet_bitHold dev_agingCmd_rcvPassive = {0}; //周期询访时效占位指令缓存 --被动接收
+stt_agingDataSet_bitHold dev_agingCmd_sndInitative = {0}; //周期询访时效占位指令缓存 --主动接收
+u8 dtModeKeepAcess_currentCmd = DTMODEKEEPACESS_FRAMECMD_ASR; //当前传输模式，主动还是被动指示
 
 const u8 test_Dats1[14] = { //调试数据
 
@@ -154,7 +161,7 @@ sockets_datsSend(socket_OBJ sObj, u8 dats[], u16 datsLen){
 			default:return FAIL;
 		}
 
-		vTaskDelay(2); //socket通畅通信间隔 20ms
+		vTaskDelay(4); //socket通畅通信间隔 40ms
 	}
 	else{
 
@@ -168,10 +175,11 @@ timer_heartBeatKeep_funCB(void *para){
 	struct ip_info ipConfig_info;
 
 	LOCAL bool heartbeat_oeFLG = true;	//奇偶包标志
-	LOCAL u8 heartbeat_Cnt = 0;	//心跳包周期计数
-	const u8 heartbeat_Period = SOCKET_HEARTBEAT_PERIOD / timer_heartBeatKeep_Period;	//心跳包计数周期
 
-	u8 heartBeat_Pack[dataHeartBeatLength_objSERVER] = {0};
+	u8 frameTx_temp[dataHeartBeatLength_objSERVER] = {0};
+	u8 frameTx_dataLen = 0;
+
+	stt_usrDats_privateSave *datsRead_Temp;
 
 	wifi_get_ip_info(STATION_IF, &ipConfig_info);
 	(wifi_station_get_connect_status() == STATION_GOT_IP && ipConfig_info.ip.addr != 0)?(internet_connFLG = true):(internet_connFLG = false);
@@ -182,34 +190,114 @@ timer_heartBeatKeep_funCB(void *para){
 		else{
 
 			heartbeat_Cnt = 0;
+			
+#if(ZIGB_DATATRANS_WORKMODE == DATATRANS_WORKMODE_HEARTBEAT)
+
 			heartbeat_oeFLG = !heartbeat_oeFLG;
 
-			heartBeat_Pack[0] = FRAME_HEAD_HEARTB;				
-			heartBeat_Pack[1] = dataHeartBeatLength_objSERVER;
-			memcpy(&heartBeat_Pack[4], &MACSTA_ID[1], 5);
+			frameTx_temp[0] = FRAME_HEAD_HEARTB;				
+			frameTx_temp[1] = dataHeartBeatLength_objSERVER;
+			memcpy(&frameTx_temp[4], &MACSTA_ID[1], 5);
 
 			if(heartbeat_oeFLG){	//奇数包
 
-				heartBeat_Pack[2] = FRAME_HEARTBEAT_cmdOdd;
+				frameTx_temp[2] = FRAME_HEARTBEAT_cmdOdd;
 
-				heartBeat_Pack[9] 	= 0; 
-				heartBeat_Pack[10] 	= 0; 
-				heartBeat_Pack[11] 	= 0; 
-				heartBeat_Pack[12] 	= 0; 
-				heartBeat_Pack[13] 	= 0; 
+				frameTx_temp[9] 	= 0; 
+				frameTx_temp[10] 	= 0; 
+				frameTx_temp[11] 	= 0; 
+				frameTx_temp[12] 	= 0; 
+				frameTx_temp[13] 	= 0; 
 				
 			}else{					//偶数包
 
-				heartBeat_Pack[2] = FRAME_HEARTBEAT_cmdEven;
+				frameTx_temp[2] = FRAME_HEARTBEAT_cmdEven;
 
-				heartBeat_Pack[9] 	= 0; 
-				heartBeat_Pack[10] 	= 0; 
-				heartBeat_Pack[11] 	= 0; 
-				heartBeat_Pack[12] 	= 0; 
-				heartBeat_Pack[13] 	= 0; 
+				frameTx_temp[9] 	= 0; 
+				frameTx_temp[10] 	= 0; 
+				frameTx_temp[11] 	= 0; 
+				frameTx_temp[12] 	= 0; 
+				frameTx_temp[13] 	= 0; 
 			}
 
-			sockets_datsSend(Obj_udpRemote_B, heartBeat_Pack, dataHeartBeatLength_objSERVER);
+			frameTx_dataLen = dataHeartBeatLength_objSERVER;
+			
+#elif(ZIGB_DATATRANS_WORKMODE == DATATRANS_WORKMODE_KEEPACESS)
+
+			datsRead_Temp = devParam_flashDataRead();
+
+			//状态填装 -实时值
+			dev_currentDataPoint.devStatus_Reference.statusRef_swStatus 	= status_actuatorRelay; //周期询访本地数据点 开关状态更新
+			dev_currentDataPoint.devStatus_Reference.statusRef_timer		= ifTim_sw_running_FLAG; //周期询访本地数据点 定时器状态更新
+			dev_currentDataPoint.devStatus_Reference.statusRef_devLock		= deviceLock_flag;
+			dev_currentDataPoint.devStatus_Reference.statusRef_delay		= (ifDelay_sw_running_FLAG & 0x02) >> 1;
+			dev_currentDataPoint.devStatus_Reference.statusRef_greenMode	= (ifDelay_sw_running_FLAG & 0x01) >> 0;
+			dev_currentDataPoint.devStatus_Reference.statusRef_nightMode	= ifNightMode_sw_running_FLAG;
+			dev_currentDataPoint.devStatus_Reference.statusRef_horsingLight = 0;
+
+			//属性值填装 -实时值
+			memcpy(&dev_currentDataPoint.devData_timer, datsRead_Temp->swTimer_Tab, 3 * 8);
+			dev_currentDataPoint.devData_delayer		= delayPeriod_onoff - (delayCnt_onoff / 60);
+			dev_currentDataPoint.devData_delayUpStatus	= delayUp_act;
+			dev_currentDataPoint.devData_greenMode		= delayPeriod_closeLoop;
+			{ //夜间模式数据特殊转换
+				
+				timing_Dats nightDatsTemp_CalibrateTab[2] = {0};
+
+				memcpy(nightDatsTemp_CalibrateTab, datsRead_Temp->devNightModeTimer_Tab, 3 * 2);
+				((nightDatsTemp_CalibrateTab[0].Week_Num & 0x7F) == 0x7F)?(dev_currentDataPoint.devData_nightMode[0] = 1):(dev_currentDataPoint.devData_nightMode[0] = 0);
+				(nightDatsTemp_CalibrateTab[0].if_Timing)?(dev_currentDataPoint.devData_nightMode[1] = 1):(dev_currentDataPoint.devData_nightMode[1] = 0);
+				dev_currentDataPoint.devData_nightMode[2] = nightDatsTemp_CalibrateTab[0].Hour;
+				dev_currentDataPoint.devData_nightMode[3] = nightDatsTemp_CalibrateTab[0].Minute;
+				dev_currentDataPoint.devData_nightMode[4] = nightDatsTemp_CalibrateTab[1].Hour;
+				dev_currentDataPoint.devData_nightMode[5] = nightDatsTemp_CalibrateTab[1].Minute;
+			}
+			memcpy(&dev_currentDataPoint.devData_bkLight[0], &(datsRead_Temp->bkColor_swON), 1);
+			memcpy(&dev_currentDataPoint.devData_bkLight[1], &(datsRead_Temp->bkColor_swOFF), 1);
+			dev_currentDataPoint.devData_devReset = 0;
+
+			//时效操作占位指令填装
+			switch(dtModeKeepAcess_currentCmd){
+
+				case DTMODEKEEPACESS_FRAMECMD_ASR:{
+				
+					memcpy(&dev_currentDataPoint.devAgingOpreat_agingReference, &dev_agingCmd_rcvPassive, sizeof(stt_agingDataSet_bitHold));
+				
+				}break;
+					
+				case DTMODEKEEPACESS_FRAMECMD_PST:{
+				
+					memcpy(&dev_currentDataPoint.devAgingOpreat_agingReference, &dev_agingCmd_sndInitative, sizeof(stt_agingDataSet_bitHold));
+				
+				}break;
+					
+				default:{}break;
+			}
+
+			//数据帧总数据最后填装
+			frameTx_dataLen						= 0;
+			frameTx_temp[frameTx_dataLen ++]	= DTMODEKEEPACESS_FRAMEHEAD_ONLINE; //帧头
+			frameTx_temp[frameTx_dataLen ++]	= 0;  //帧长暂填0，最后更新
+			memcpy(&frameTx_temp[frameTx_dataLen], &MACSTA_ID[1], 5); //MAC
+			frameTx_dataLen += 6; //空出1Byte MAC
+			frameTx_temp[frameTx_dataLen ++]	= dtModeKeepAcess_currentCmd; //命令
+			frameTx_temp[frameTx_dataLen ++]	= SWITCH_TYPE; //开关信息
+			frameTx_temp[frameTx_dataLen ++]	= 0; //devVersion_reserve
+			frameTx_temp[frameTx_dataLen ++]	= 0; //devVersion_reserve
+			frameTx_temp[frameTx_dataLen ++]	= 0; //devVersion_reserve
+			frameTx_temp[frameTx_dataLen ++]	= sysTimeZone_H; //时区_时
+			frameTx_temp[frameTx_dataLen ++]	= sysTimeZone_M; //时区_分
+			memcpy(&frameTx_temp[frameTx_dataLen], &dev_currentDataPoint, sizeof(stt_devOpreatDataPonit)); //直接数据指针对齐，数据点直接数据帧待发缓存进行数据结构强怼
+			frameTx_dataLen += sizeof(stt_devOpreatDataPonit);
+			frameTx_dataLen ++;
+			frameTx_temp[1] 					= frameTx_dataLen;
+			frameTx_temp[frameTx_dataLen - 1] = frame_Check(&frameTx_temp[1], frameTx_dataLen - 2); //校验码最后算
+
+			os_free(datsRead_Temp);
+
+#endif
+
+			sockets_datsSend(Obj_udpRemote_B, frameTx_temp, frameTx_dataLen);
 			
 //			printf_datsHtoA("[Tips_threadNet]: hearBeat datsSend is:", heartBeat_Pack, dataHeartBeatLength_objSERVER);
 //			(heartbeat_oeFLG)?(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats1, 14)):(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats2, 14));
@@ -778,19 +866,196 @@ socketsDataTransProcess_task(void *pvParameters){
 
 				switch(rptr_socketDats.dstObj){
 
-					case obj_toWIFI:{
+					case obj_toWIFI:{ //给网关主机的
+
+						stt_usrDats_privateSave datsSave_Temp = {0};
+
+						stt_agingDataSet_bitHold agingCmd_Temp = {0};
+						stt_devOpreatDataPonit dev_dataPointTemp = {0};
+						
+						bool frameCodeCheck_PASS = false; //校验码检查通过标志
+						bool frameMacCheck_PASS  = false; //MAC资质检查通过标志
 
 						os_printf("[Tips_NWK-SKdats]: netGate_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>.\n", 
+								  rptr_socketDats.dats[2],
 								  rptr_socketDats.dats[3],
 								  rptr_socketDats.dats[4],
 								  rptr_socketDats.dats[5],
 								  rptr_socketDats.dats[6],
-								  rptr_socketDats.dats[7],
 								  rptr_socketDats.command);
-	
+
+						if(rptr_socketDats.dats[rptr_socketDats.dats[1] - 1] == frame_Check(&rptr_socketDats.dats[1], rptr_socketDats.dats[1] - 2))frameCodeCheck_PASS = true;
+						if(!memcmp(&rptr_socketDats.dats[2], &MACSTA_ID[1], 5))frameMacCheck_PASS = 1;
+
+						if(frameCodeCheck_PASS && frameMacCheck_PASS){ 
+
+							memcpy(&dev_dataPointTemp, &rptr_socketDats.dats[15], sizeof(stt_devOpreatDataPonit));
+							switch(rptr_socketDats.dats[8]){ //帧命令
+
+								case DTMODEKEEPACESS_FRAMECMD_ASR:{
+
+									static bool local_ftyRecover_standbyFLG = false; //恢复出厂设置预动作标志
+
+									/*时效命令判断*///进行时效动作后，清空时效操作位
+									if(memcmp(&agingCmd_Temp, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold))){
+
+										heartbeat_Cnt = heartbeat_Period; //有时效控制，强行提前定时通讯，即时回码
+										
+										memcpy(&dev_agingCmd_rcvPassive, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold)); //本地被动时效操作缓存同步更新，用于原位回发
+										
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_swOpreat){ //开关状态操作，需要时效
+
+											if((status_actuatorRelay & 0x07) != dev_dataPointTemp.devStatus_Reference.statusRef_swStatus){ 
+
+												swCommand_fromUsr.objRelay = dev_dataPointTemp.devStatus_Reference.statusRef_swStatus;
+												swCommand_fromUsr.actMethod = relay_OnOff;
+
+												os_printf(">>>>>>>>relayStatus reales:%02X, currentVal:%02X.\n", (int)status_actuatorRelay & 0x07, (int)dev_dataPointTemp.devStatus_Reference.statusRef_swStatus);
+											}
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_delaySetOpreat){ //延时设置操作，需要时效
+
+											if(dev_dataPointTemp.devData_delayer){ //延时时间大于0就是开启操作
+											
+												ifDelay_sw_running_FLAG |= (1 << 1); //延时标志更新，启动
+												delayPeriod_onoff		= dev_dataPointTemp.devData_delayer; //延时时间
+												delayUp_act 			= dev_dataPointTemp.devData_delayUpStatus; //延时到达时，开关响应状态
+												delayCnt_onoff			= 0; //延时计数清零
+												
+											}else{ //否则为关闭操作
+
+												ifDelay_sw_running_FLAG &= ~(1 << 0); //延时标志更新，关闭
+												delayPeriod_onoff		= 0; 
+												delayCnt_onoff			= 0; 
+											}
+
+											os_printf(">>>>>>>>delayPeriod:[%d], delayUpAct:[%02X].\n", (int)delayPeriod_onoff, (int)delayUp_act);
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_devResetOpreat){ //恢复出厂重启操作，需要时效
+
+											local_ftyRecover_standbyFLG = 1; //恢复出厂预动作标志置位，先做就绪态，等待时效标志清零后进行实际动作
+
+											os_printf(">>>>>>>>factory recover standBy!.\n");
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_devLock){  //设备上锁设置操作，需要时效
+
+											if(dev_dataPointTemp.devStatus_Reference.statusRef_devLock){ //数据放在状态里
+											
+												datsSave_Temp.dev_lockIF = deviceLock_flag = 1; //运行缓存及本地存储更新
+												
+											}else{
+											
+												datsSave_Temp.dev_lockIF = deviceLock_flag = 0; //运行缓存及本地存储更新
+											}
+											devParam_flashDataSave(obj_dev_lockIF, datsSave_Temp); //本地存储动作执行
+
+											os_printf(">>>>>>>>agingCmd devLock coming, lockIf:[%d].\n", (int)dev_dataPointTemp.devStatus_Reference.statusRef_devLock);
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_timerSetOpreat){  //定时设置操作，需要时效
+
+											for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){ //运行缓存更新
+											
+												if(dev_dataPointTemp.devData_timer[loop * 3] == 0x80){	/*一次性定时判断*///周占位为空而定时器被打开，说明是一次性
+												
+													swTim_onShoot_FLAG	|= (1 << loop); //一次标志开启
+													dev_dataPointTemp.devData_timer[loop * 3] |= (1 << (systemTime_current.time_Week - 1)); //强行进行当前周占位，当次执行完毕后清除
+												}
+											}
+											memcpy(datsSave_Temp.swTimer_Tab, dev_dataPointTemp.devData_timer, 8 * 3); //本地存储更新
+											devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //本地存储动作执行
+											
+											datsTiming_getRealse(); //本地运行数据更新
+
+											os_printf(">>>>>>>>agingCmd timer coming, dataTab3:[%02X-%02X-%02X].\n", (int)dev_dataPointTemp.devData_timer[6],
+																													 (int)dev_dataPointTemp.devData_timer[7],
+																													 (int)dev_dataPointTemp.devData_timer[8]);
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_greenModeSetOpreat){  //绿色模式设置操作，需要时效
+
+											datsSave_Temp.swDelay_periodCloseLoop = dev_dataPointTemp.devData_greenMode; //本地存储更新
+											(dev_dataPointTemp.devData_greenMode)?(ifDelay_sw_running_FLAG |= (1 << 0)):(ifDelay_sw_running_FLAG &= ~(1 << 0)); //运行缓存更新
+											delayPeriod_closeLoop = dev_dataPointTemp.devData_greenMode;
+											devParam_flashDataSave(obj_swDelay_periodCloseLoop, datsSave_Temp); //本地存储动作执行
+
+											os_printf(">>>>>>>>agingCmd greenMode coming, timeSet:%d.\n", dev_dataPointTemp.devData_greenMode);
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_nightModeSetOpreat){  //夜间模式设置操作，需要时效
+
+											u8 dataTemp[3 * 2] = {0};
+											
+											(dev_dataPointTemp.devData_nightMode[0])?(dataTemp[0] |= 0x7f):(dataTemp[0] &= ~0x7f);
+											(dev_dataPointTemp.devData_nightMode[1])?(dataTemp[0] |= 0x80):(dataTemp[0] &= ~0x80);
+											dataTemp[1] = dev_dataPointTemp.devData_nightMode[2] << 3; //下标2， 高5位， 时
+											dataTemp[2] = dev_dataPointTemp.devData_nightMode[3];	   //下标3， 高8位， 分
+											dataTemp[4] = dev_dataPointTemp.devData_nightMode[4] << 3; //下标4， 高5位， 时
+											dataTemp[5] = dev_dataPointTemp.devData_nightMode[5];	   //下标5， 高8位，	分
+											
+											memcpy(datsSave_Temp.devNightModeTimer_Tab, dataTemp, 3 * 2); //本地存储更新
+											devParam_flashDataSave(obj_devNightModeTimer_Tab, datsSave_Temp); //本地存储动作执
+
+											datsTiming_getRealse(); //本地运行数据更新
+
+											os_printf(">>>>>>>>agingCmd nightMode coming.\n");
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_bkLightSetOpreat){  //背光灯设置操作，需要时效
+
+											datsSave_Temp.bkColor_swON = tipsInsert_swLedBKG_ON	= dev_dataPointTemp.devData_bkLight[0]; //运行缓存及本地存储更新
+											datsSave_Temp.bkColor_swOFF = tipsInsert_swLedBKG_OFF = dev_dataPointTemp.devData_bkLight[1]; //运行缓存及本地存储更新
+											devParam_flashDataSave(obj_bkColor_swON, datsSave_Temp); //本地存储动作执行
+											devParam_flashDataSave(obj_bkColor_swOFF, datsSave_Temp); //本地存储动作执行
+
+											os_printf(">>>>>>>>agingCmd bkLight coming, on-Isrt:%02d, off-Isrt:%02d.\n", dev_dataPointTemp.devData_bkLight[0], dev_dataPointTemp.devData_bkLight[1]);
+										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_horsingLight){  //跑马灯设置操作，需要时效
+
+											
+										}
+										
+									}
+									else{
+
+										memset(&dev_agingCmd_rcvPassive, 0, sizeof(stt_agingDataSet_bitHold));
+										if(local_ftyRecover_standbyFLG){
+
+											local_ftyRecover_standbyFLG = 0;
+											os_printf(">>>>>>>>factory recover doing now!.\n");
+										
+											system_restart();
+										}
+									}
+
+								}break;
+
+								case DTMODEKEEPACESS_FRAMECMD_PST:{
+
+									if(memcmp(&dev_agingCmd_sndInitative, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold))){ //判断本地时效是否被响应，否则不动作
+									
+										dtModeKeepAcess_currentCmd = DTMODEKEEPACESS_FRAMECMD_PST;
+										
+									}else{
+
+										heartbeat_Period = (u8)(PERIOD_HEARTBEAT_ASR / timer_heartBeatKeep_Period); //定时周期切换为被动
+										memset(&dev_agingCmd_sndInitative, 0, sizeof(stt_agingDataSet_bitHold)); //主动发送动作时效清零
+										dtModeKeepAcess_currentCmd = DTMODEKEEPACESS_FRAMECMD_ASR;
+									}
+
+								}break;
+
+								default:break;
+							}
+						}
+						
 					}break;
 
-					case obj_toZigB:{
+					case obj_toZigB:{ //给zigb子设备的
 
 						memset(&mptr_S2Z, 0, sizeof(stt_threadDatsPass));
 						
@@ -822,13 +1087,14 @@ socketsDataTransProcess_task(void *pvParameters){
 
 						if(!memcmp(debugLogOut_targetMAC ,mptr_S2Z.dats.dats_conv.macAddr, 5)){
 
-							os_printf("[Tips_NWK-SKdats]: node_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>.\n", 
+							os_printf("[Tips_NWK-SKdats]: node_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>,<dataLen:%d>.\n", 
 									  mptr_S2Z.dats.dats_conv.macAddr[0],
 									  mptr_S2Z.dats.dats_conv.macAddr[1],
 									  mptr_S2Z.dats.dats_conv.macAddr[2],
 									  mptr_S2Z.dats.dats_conv.macAddr[3],
 									  mptr_S2Z.dats.dats_conv.macAddr[4],
-									  rptr_socketDats.command);							
+									  rptr_socketDats.command,
+									  rptr_socketDats.datsLen);							
 						}
 
 //						os_printf("[Tips_NWK-SKdats]: node_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>.\n", 
@@ -856,6 +1122,8 @@ socketsDataTransProcess_task(void *pvParameters){
 
 			devActionPush_IF.push_IF = false;
 
+#if(ZIGB_DATATRANS_WORKMODE == DATATRANS_WORKMODE_HEARTBEAT) //原定时通讯机制：心跳
+
 			const bool specialCMD_IF = false;
 
 #define swActionPush_repeatTxLen	45
@@ -873,6 +1141,17 @@ socketsDataTransProcess_task(void *pvParameters){
 			sockets_datsSend(Obj_udpRemote_B, repeatTX_buff, repeatTX_Len);
 
 			os_printf("swData push:%02X.\n", devActionPush_IF.dats_Push);
+
+#elif(ZIGB_DATATRANS_WORKMODE == DATATRANS_WORKMODE_KEEPACESS) //定时通讯机制：周期询访
+
+			dev_currentDataPoint.devStatus_Reference.statusRef_swPush = (devActionPush_IF.dats_Push & 0xE0) >> 5; //属性值填装
+			dev_agingCmd_sndInitative.agingCmd_swOpreat = 1; //主动控制时效置位
+			dtModeKeepAcess_currentCmd = DTMODEKEEPACESS_FRAMECMD_PST; //命令改为主动上传
+
+			heartbeat_Period = (u8)(PERIOD_HEARTBEAT_PST / timer_heartBeatKeep_Period); //定时周期改为主动
+			heartbeat_Cnt = heartbeat_Period;  //立即生效
+#endif
+
 		}
 
 /*>>>>>>zigbee消息数据处理<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/

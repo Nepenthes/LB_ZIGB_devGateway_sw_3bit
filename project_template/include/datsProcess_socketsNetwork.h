@@ -8,11 +8,22 @@
 #define FRAME_HEAD_SERVER		0xCC
 #define FRAME_HEAD_HEARTB		0xAA
 
-#define SOCKET_HEARTBEAT_PERIOD				8000	//主机心跳包周期 单位：ms
+#define DATATRANS_WORKMODE_HEARTBEAT		0x0A //心跳模式
+#define DATATRANS_WORKMODE_KEEPACESS		0x0B //询访模式
+#define ZIGB_DATATRANS_WORKMODE				DATATRANS_WORKMODE_KEEPACESS //定时类通讯模式选择
+
+#define timer_heartBeatKeep_Period			1000UL
+
+#if(ZIGB_DATATRANS_WORKMODE == DATATRANS_WORKMODE_HEARTBEAT) //根据宏判断做定义
+	#define PERIOD_HEARTBEAT_ASR		8000UL  	//心跳发送周期	单位；ms
+#elif(ZIGB_DATATRANS_WORKMODE == DATATRANS_WORKMODE_KEEPACESS)
+	#define PERIOD_HEARTBEAT_ASR		20000UL  	//周期询访模式数据包发送周期-被动 单位：ms
+	#define PERIOD_HEARTBEAT_PST		2000UL		//周期询访模式数据包发送周期-主动 单位；ms
+#endif
 
 #define dataTransLength_objLOCAL			33
 #define dataTransLength_objREMOTE			45
-#define dataHeartBeatLength_objSERVER		14
+#define dataHeartBeatLength_objSERVER		96
 
 #define FRAME_TYPE_MtoS_CMD					0xA0	/*数据类型*///手机到开关-WIFI
 #define FRAME_TYPE_StoM_RCVsuccess			0x0A	/*数据类型*///开关到手机-WIFI
@@ -80,7 +91,7 @@ typedef struct{
 	datsTrans_dstObj	dstObj;			//数据是给wifi还是zigb
 	socket_OBJ 			portObj;		//数据对象（本地还是远端）
 	u8 command;		//命令
-	u8 dats[64];	//数据
+	u8 dats[96];	//数据
 	u8 datsLen;		//数据长度
 }stt_socketDats;
 

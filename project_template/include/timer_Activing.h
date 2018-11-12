@@ -6,6 +6,8 @@
 #define timCount_ENABLE		0x01
 #define timCount_DISABLE	0x00
 
+#define TIMEER_TABLENGTH	8
+
 typedef struct{
 
 	u8 time_Year;

@@ -28,7 +28,7 @@ stt_localTime systemTime_current = {0}; //系统本地时间
 u16	sysTimeKeep_counter	= 0; //系统本地时间维持更新计时
 
 /*因频繁查询flash会导致定时器表现不稳，业务定时表改为全局变量，将仅在定时表变更时读写flash，减少读写次数*/
-timing_Dats timDatsTemp_CalibrateTab[4] = {0}; 		//普通时刻定时表
+timing_Dats timDatsTemp_CalibrateTab[TIMEER_TABLENGTH] = {0}; 		//普通时刻定时表
 u8 			swTim_onShoot_FLAG 			= 0; 	 	//普通时刻定时一次性使能标志
 bool 		ifTim_sw_running_FLAG 		= false; 	//普通时刻定时正在运行标志
 
@@ -184,7 +184,7 @@ datsTiming_getRealse(void){
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
 	u8 loop = 0;
 	
-	for(loop = 0; loop < 4; loop ++){ //普通开关动作定时信息更新
+	for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){ //普通开关动作定时信息更新
 	
 		timDatsTemp_CalibrateTab[loop].Week_Num		= (datsRead_Temp->swTimer_Tab[loop * 3 + 0] & 0x7f) >> 0;	
 		timDatsTemp_CalibrateTab[loop].if_Timing 	= (datsRead_Temp->swTimer_Tab[loop * 3 + 0] & 0x80) >> 7;	
@@ -286,19 +286,22 @@ timActingProcess_task(void *pvParameters){
 
 
 		/*所有普通开关定时业务*/
-		if((timDatsTemp_CalibrateTab[0].if_Timing == 0) &&	//若全关，更新标志位
-		   (timDatsTemp_CalibrateTab[1].if_Timing == 0) &&
-		   (timDatsTemp_CalibrateTab[2].if_Timing == 0) &&
-		   (timDatsTemp_CalibrateTab[3].if_Timing == 0)
-		  ){
-		  
-			ifTim_sw_running_FLAG = 0; 
-			  
-		}else{ //非全关，更新标志位，并执行逻辑
-			
-			ifTim_sw_running_FLAG = 1; 
+		for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){
 		
-			for(loop = 0; loop < 4; loop ++){
+			if(timDatsTemp_CalibrateTab[loop].if_Timing){ //判断是否有定时段开启
+			
+				ifTim_sw_running_FLAG = 1; //只要有一个定时段可用就把定时运行标志置位
+				break;
+				
+			}else{
+			
+				ifTim_sw_running_FLAG = 0;
+			}
+		}
+
+		if(ifTim_sw_running_FLAG){ //非全关，执行业务逻辑
+			
+			for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){
 				
 				if(true == weekend_judge(systemTime_current.time_Week, timDatsTemp_CalibrateTab[loop].Week_Num)){ //周占位对比
 				

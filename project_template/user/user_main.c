@@ -65,6 +65,7 @@ extern xQueueHandle xMsgQ_zigbFunRemind;
 extern xQueueHandle xMsgQ_devUpgrade;
 
 extern stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen];
+extern stt_dataScenarioReq localZigbASYDT_bufQueueScenarioReq[zigB_ScenarioCtrlDataTransASY_QbuffLen];
 
 void devConnectAP_autoInit(char P_ssid[32], char P_password[64]);
 void somartConfig_complete(void);
@@ -502,9 +503,13 @@ timerFunCB_usrReference(void *para){
 	}
 
 	/*其它1ms定时业务*/
-	for(loop = 0; loop < zigB_remoteDataTransASY_QbuffLen; loop ++){
+	for(loop = 0; loop < zigB_remoteDataTransASY_QbuffLen; loop ++){ //普通远端数据请求异步发送缓存周期判断
 
 		if(localZigbASYDT_bufQueueRemoteReq[loop].dataReqPeriod)localZigbASYDT_bufQueueRemoteReq[loop].dataReqPeriod --;
+	}
+	for(loop = 0; loop < zigB_ScenarioCtrlDataTransASY_QbuffLen; loop ++){
+
+		if(localZigbASYDT_bufQueueScenarioReq[loop].dataReqPeriod)localZigbASYDT_bufQueueScenarioReq[loop].dataReqPeriod --;
 	}
 }
 
@@ -580,7 +585,6 @@ void user_init(void)
 	zigbee_mainThreadStart(); //zigbee主线程激活
 	network_mainThreadStart(); //网络通信主线程激活
 	sntp_timerActThread_Start(); //stnp网络授时线程激活
-	devUpgradeDetecting_Start(); //OTA升级检测线程激活
 	relayActing_ThreadStart(); //继电器动作线程激活
 	usrInterface_ThreadStart(); //触摸及按键检测线程激活
 	timActing_ThreadStart(); //用户业务定时线程激活
@@ -590,6 +594,7 @@ void user_init(void)
 	/*Sockets建立不能进行二次封装，否则影响smartlink功能，导致重启*/
 	mySocketUDPlocal_A_buildInit();	//Socket建立_本地UDP_A
 	mySocketUDPremote_B_buildInit();//Socket建立_远端服务器UDP_B
+	devUpgradeDetecting_Start(); //OTA升级检测线程激活
 //	tcpRemote_A_connectStart();	//Socket建立_远端TCP_A
 //	tcpRemote_B_connectStart();	//Socket建立_远端TCP_B
 

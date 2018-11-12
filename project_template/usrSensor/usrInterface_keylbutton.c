@@ -77,7 +77,7 @@ LOCAL void ICACHE_FLASH_ATTR
 touchFunCB_sysGetRestart(void){
 
 	os_printf("system get restart right now! please wait.\n");
-	system_restart();
+//	system_restart();
 }
 
 LOCAL void ICACHE_FLASH_ATTR
