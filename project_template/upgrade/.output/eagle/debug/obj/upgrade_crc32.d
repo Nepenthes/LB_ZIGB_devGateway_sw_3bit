@@ -77,7 +77,6 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/smartconfig.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/spi_flash.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/pwm.h \
- D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/esp_common.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/lwip/lwip/err.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/lwip/lwip/mem.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/esp_libc.h

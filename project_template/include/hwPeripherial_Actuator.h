@@ -44,7 +44,8 @@ extern bool devStatus_ctrlEachO_IF;
 extern u8 EACHCTRL_realesFLG;
 extern bool devStatus_pushIF;
 extern relayStatus_PUSH devActionPush_IF;
-	
+
+void actuatorRelay_Init(void);	
 void relayActing_ThreadStart(void);
 
 #endif

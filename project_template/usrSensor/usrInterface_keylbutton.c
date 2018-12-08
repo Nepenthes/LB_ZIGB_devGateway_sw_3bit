@@ -36,6 +36,8 @@ u16	touchPadContinueCnt	= 0;  //Á¬°´¼ä¸ô¼ÆÊ±¼ÆÊýÖµ£¨´¥Ãþ°´¼ü£©
 bool usrKeyCount_EN	= false;  //°´ÏÂÊ±¼ä¼ÆÊ±¼ÆÊýÖµ£¨Çá´¥°´¼ü£©
 u16	 usrKeyCount	= 0;  //°´ÏÂÊ±¼ä¼ÆÊ±Ê¹ÄÜ£¨Çá´¥°´¼ü£©
 
+LOCAL bool relayStatusRecovery_doneIF = false; //¼ÌµçÆ÷ÈôÔÚ¼ÇÒäÊ¹ÄÜÇé¿öÏÂ£¬ÐèÒªÔÚ²¦ÂëÈ·ÈÏºó½øÐÐ»Ö¸´
+
 LOCAL xTaskHandle pxTaskHandle_threadUsrInterface;
 
 LOCAL void usrSmartconfig_start(void);
@@ -44,8 +46,12 @@ LOCAL void usrSmartconfig_start(void);
 LOCAL void ICACHE_FLASH_ATTR
 usrFunCB_pressShort(void){
 
-	os_printf("usrKey_short.\n");
+	os_printf("usrKey_short, wait for reStart.\n");
 
+	beeps_usrActive(3, 160, 3);
+	tips_statusChangeToTouchReset();
+	vTaskDelay(1000); //¹ÒÆð10sºóÖØÆô£¬µÈ´ýÌáÊ¾
+	system_restart();
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -53,6 +59,7 @@ usrFunCB_pressLongA(void){
 
 	os_printf("usrKey_Long_A.\n");
 
+	beeps_usrActive(3, 20, 2);
 	if(WIFIMODE_STA == wifi_get_opmode()){
 
 		usrSmartconfig_start();
@@ -66,17 +73,23 @@ usrFunCB_pressLongA(void){
 LOCAL void ICACHE_FLASH_ATTR
 usrFunCB_pressLongB(void){
 
-	os_printf("usrKey_Long_B.\n");
+	os_printf("usrKey_Long_B£¬factory recovery opreation trig.\n");
 
-	u8 mptr_upgrade = DEVUPGRADE_PUSH;
+//	u8 mptr_upgrade = DEVUPGRADE_PUSH;
 //	mptr_upgrade = 0;
-	xQueueSend(xMsgQ_devUpgrade, (void *)&mptr_upgrade, 0); 	
+//	xQueueSend(xMsgQ_devUpgrade, (void *)&mptr_upgrade, 0); 	
+
+	beeps_usrActive(3, 20, 2);
+	tips_statusChangeToFactoryRecover();
+	devData_recoverFactory(); //»Ö¸´³ö³§¹ÒÆð4s£¬µÈ´ýÌáÊ¾½áÊø
+	vTaskDelay(400); 
+	system_restart();
 }
 
 LOCAL void ICACHE_FLASH_ATTR
 touchFunCB_sysGetRestart(void){
 
-	os_printf("system get restart right now! please wait.\n");
+//	os_printf("system get restart right now! please wait.\n");
 //	system_restart();
 }
 
@@ -145,44 +158,94 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 	
 		case press_Short:{
 
+			bool tipsBeep_IF = false;
+
 			os_printf("touchShort get:%02X.\n", statusPad);
 		
 			switch(statusPad){
 				
-				case 1:
-				case 2:
-				case 4:{
+				case 1:{
 					
-					swCommand_fromUsr.actMethod = relay_flip;
-					swCommand_fromUsr.objRelay = statusPad;
-					EACHCTRL_realesFLG = statusPad; //·ÇÁ¬°´¶Ì°´´¥·¢»¥¿Ø
-					devStatus_pushIF = true; //¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
+					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 0;
+					else swCommand_fromUsr.objRelay = statusPad;
+
+					if(DEV_actReserve & 0x01)tipsBeep_IF = true;
+				
+				}break;
+				
+				case 2:{
+				
+					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 1;
+					else if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 0;
+					else swCommand_fromUsr.objRelay = statusPad;
+
+					if(DEV_actReserve & 0x02)tipsBeep_IF = true;
+				
+				}break;
+				
+				case 4:{
+				
+					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 2;
+					else swCommand_fromUsr.objRelay = statusPad;
+
+					if(DEV_actReserve & 0x04)tipsBeep_IF = true;
 					
 				}break;
 					
 				default:{}break;
 			}
+
+			swCommand_fromUsr.actMethod = relay_flip;
+			EACHCTRL_realesFLG = statusPad; //·ÇÁ¬°´¶Ì°´´¥·¢»¥¿Ø
+			devStatus_pushIF = true; //¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
+			if(tipsBeep_IF)beeps_usrActive(3, 25, 1); //´¥Ãþ¿ÉÓÃ²Åtips
 			
 		}break;
 		
 		case press_ShortCnt:{
 
+			bool tipsBeep_IF = false;
+
 			os_printf("touchCnt get:%02X.\n", statusPad);
 			
 			switch(statusPad){
 				
-				case 1:
-				case 2:
-				case 4:{
+				case 1:{
 					
-					swCommand_fromUsr.actMethod = relay_flip;
-					swCommand_fromUsr.objRelay = statusPad;
-
+					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 0;
+					else swCommand_fromUsr.objRelay = statusPad;
+			
+					if(DEV_actReserve & 0x01)tipsBeep_IF = true;
+				
+				}break;
+				
+				case 2:{
+				
+					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 1;
+					else if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 0;
+					else swCommand_fromUsr.objRelay = statusPad;
+			
+					if(DEV_actReserve & 0x02)tipsBeep_IF = true;
+				
+				}break;
+				
+				case 4:{
+				
+					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 2;
+					else swCommand_fromUsr.objRelay = statusPad;
+			
+					if(DEV_actReserve & 0x04)tipsBeep_IF = true;
+					
 				}break;
 					
 				default:{}break;
 			}
 			
+			swCommand_fromUsr.actMethod = relay_flip;
+			EACHCTRL_realesFLG = statusPad; //·ÇÁ¬°´¶Ì°´´¥·¢»¥¿Ø
+			devStatus_pushIF = true; //¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
+			if(tipsBeep_IF)beeps_usrActive(3, 25, 1); //´¥Ãþ¿ÉÓÃ²Åtips
+
 		}break;
 		
 		case press_LongA:{
@@ -360,6 +423,8 @@ DcodeScan(void){
 
 		os_printf("Dcode chg: %02X.\n", val_Dcode_Local);
 
+		beeps_usrActive(3, 20, 2);
+
 		if(val_Dcode_differ & Dcode_FLG_ifAP){
 		
 			if(val_Dcode_Local & Dcode_FLG_ifAP){
@@ -377,6 +442,12 @@ DcodeScan(void){
 			if(val_Dcode_Local & Dcode_FLG_ifMemory){
 
 				relayStatus_ifSave = statusSave_enable;
+				if(!relayStatusRecovery_doneIF){ //Ê×´Î´¥·¢¼ÌµçÆ÷×´Ì¬»Ö¸´
+
+					relayStatusRecovery_doneIF = true;
+					
+					actuatorRelay_Init();
+				}
 				
 			}else{
 			
@@ -423,7 +494,7 @@ UsrKEYScan(funKey_Callback funCB_Short, funKey_Callback funCB_LongA, funKey_Call
 	
 	const  u16 	keyCfrmLoop_Short 	= 20,		//Ïû¶¶Ê±¼ä µ¥Î»£ºms
 			   	keyCfrmLoop_LongA 	= 3000,		//³¤°´AÊ±¼ä  µ¥Î»£ºms
-			   	keyCfrmLoop_LongB 	= 10000,	//³¤°´BÊ±¼ä  µ¥Î»£ºms
+			   	keyCfrmLoop_LongB 	= 12000,	//³¤°´BÊ±¼ä  µ¥Î»£ºms
 			   	keyCfrmLoop_MAX		= 60000;	//¼ÆÊ±·â¶¥
 
 	static bool LongA_FLG = 0;
@@ -540,7 +611,6 @@ touchPad_Scan(void){
 				
 				if(pressContinueGet <= 1)touchPad_functionTrigNormal(touchPad_temp, press_Short); //·ÇÁ¬°´¶Ì°´´¥·¢
 				else touchPad_functionTrigNormal(touchPad_temp, press_ShortCnt); //Á¬°´¶Ì°´´¥·¢
-				beeps_usrActive(3, 25, 3);	
 			}
 		}
 	

@@ -58,14 +58,20 @@
 #define TIMERPERIOD_USRTEST_FUN		800
 #define TIMERPERIOD_SPECIAL1MS_FUN	1
 
-LOCAL os_timer_t timer_Test;
-LOCAL os_timer_t usrTimer_reference;
+extern bool nwkInternetOnline_IF;
 
 extern xQueueHandle xMsgQ_zigbFunRemind;
 extern xQueueHandle xMsgQ_devUpgrade;
 
 extern stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen];
 extern stt_dataScenarioReq localZigbASYDT_bufQueueScenarioReq[zigB_ScenarioCtrlDataTransASY_QbuffLen];
+
+extern u8 internetRemoteServer_portSwitchPeriod;
+
+extern bool zigbNodeDevDetectManage_runningFLG;
+
+LOCAL os_timer_t timer_Test;
+LOCAL os_timer_t usrTimer_reference;
 
 void devConnectAP_autoInit(char P_ssid[32], char P_password[64]);
 void somartConfig_complete(void);
@@ -80,7 +86,7 @@ uart1Init_Debug(void){
 
 	UART_ConfigTypeDef uart_config;
 
-	uart_config.baud_rate 			= BIT_RATE_74880;
+	uart_config.baud_rate 			= BIT_RATE_921600;
 	uart_config.data_bits 			= UART_WordLength_8b;
 	uart_config.flow_ctrl 			= USART_Parity_None;
 	uart_config.stop_bits 			= USART_StopBits_1;
@@ -428,6 +434,10 @@ uint32 user_rf_cal_sector_set(void)
 LOCAL void ICACHE_FLASH_ATTR
 timerFunCB_usrReference(void *para){ 
 
+	const u8 period1s_usrTest = 40; //定时测试业务 计时周期
+	static u8 counter1s_usrTest = 0;  //定时测试业务 计时值
+	static u8 internetServerPort_switchInsert = 0; //端口切换索引
+
 	const u16 period_1second = 1000;
 	static u16 counter_1second = 0;
 
@@ -471,13 +481,15 @@ timerFunCB_usrReference(void *para){
 			if(delayCnt_onoff < ((u16)delayPeriod_onoff * 60))delayCnt_onoff ++;
 			else{
 			
-				delayCnt_onoff = 0;
+				delayPeriod_onoff = delayCnt_onoff = 0;
 				
 				ifDelay_sw_running_FLAG &= ~(1 << 1);	//标志清除
 				
 				swCommand_fromUsr.actMethod = relay_OnOff; //动作响应
 				swCommand_fromUsr.objRelay = delayUp_act;
 				devStatus_pushIF = true; //开关状态数据推送
+
+				os_printf(">>>>>>>>delayAct opreation up.\n");
 			}
 		}	
 
@@ -500,6 +512,29 @@ timerFunCB_usrReference(void *para){
 
 		//zigb网络开放倒计时
 		if(timeCount_zigNwkOpen)timeCount_zigNwkOpen --;
+
+		//zigb设备链表监管周期更新，1s一次
+		if(!zigbNodeDevDetectManage_runningFLG)zigbNodeDevDetectManage_runningFLG = true;
+
+//		//定时测试业务[服务器网络端口切换]
+//		if(counter1s_usrTest < period1s_usrTest)counter1s_usrTest ++; 
+//		else{
+
+//			counter1s_usrTest = 0;
+
+//			internetServerPort_switchInsert ++;
+//			if(internetServerPort_switchInsert >= INTERNET_REMOTESERVER_PORTTAB_LEN)internetServerPort_switchInsert = 0;
+//			if(nwkInternetOnline_IF)mySocketUDPremote_B_portChange(remoteServerPort_switchTab[internetServerPort_switchInsert]); //端口切换操作
+//		}
+
+		//网络在线情况下，通信不正常切换端口
+		if(internetRemoteServer_portSwitchPeriod)internetRemoteServer_portSwitchPeriod --;
+		else{
+
+			internetRemoteServer_portSwitchPeriod = INTERNET_SERVERPORT_SWITCHPERIOD;
+			(internetServerPort_switchInsert >= INTERNET_REMOTESERVER_PORTTAB_LEN - 1)?(internetServerPort_switchInsert = 0):(internetServerPort_switchInsert ++);
+			if(nwkInternetOnline_IF)mySocketUDPremote_B_portChange(remoteServerPort_switchTab[internetServerPort_switchInsert]);
+		}
 	}
 
 	/*其它1ms定时业务*/
@@ -598,10 +633,10 @@ void user_init(void)
 //	tcpRemote_A_connectStart();	//Socket建立_远端TCP_A
 //	tcpRemote_B_connectStart();	//Socket建立_远端TCP_B
 
-	tipsLED_rgbColorSet(3,	1, 	0, 	6);
-	tipsLED_rgbColorSet(2, 10, 	0, 	0);
-	tipsLED_rgbColorSet(1, 	0, 10, 	0);
-	tipsLED_rgbColorSet(0, 	0, 	0, 10);
+	tipsLED_rgbColorSet(3, 31, 	0, 	0);
+	tipsLED_rgbColorSet(2, 31, 	0, 	0);
+	tipsLED_rgbColorSet(1, 31,  0, 	0);
+	tipsLED_rgbColorSet(0, 31, 	0,  0);
 
 	os_timer_disarm(&timer_Test); //用户测试定时器
 	os_timer_setfn(&timer_Test, (os_timer_func_t *)timerFunCB_Test, NULL);

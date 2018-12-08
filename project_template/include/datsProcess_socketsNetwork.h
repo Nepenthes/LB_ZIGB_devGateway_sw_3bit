@@ -21,6 +21,8 @@
 	#define PERIOD_HEARTBEAT_PST		2000UL		//周期询访模式数据包发送周期-主动 单位；ms
 #endif
 
+#define INTERNET_SERVERPORT_SWITCHPERIOD	(u8)(PERIOD_HEARTBEAT_ASR / 1000UL * 3UL)
+
 #define dataTransLength_objLOCAL			33
 #define dataTransLength_objREMOTE			45
 #define dataHeartBeatLength_objSERVER		96

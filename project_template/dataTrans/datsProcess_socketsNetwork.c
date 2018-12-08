@@ -17,6 +17,7 @@
 #include "hwPeripherial_Actuator.h"
 #include "usrParsingMethod.h"
 #include "datsManage.h"
+#include "usrInterface_Tips.h"
 
 extern u8 	swTim_onShoot_FLAG; 
 extern bool ifTim_sw_running_FLAG; 
@@ -37,6 +38,8 @@ LOCAL os_timer_t timer_heartBeatKeep;
 
 u8 heartbeat_Period = (u8)(PERIOD_HEARTBEAT_ASR / timer_heartBeatKeep_Period);	//周期性数据传输间隔定义
 u8 heartbeat_Cnt = 0;	//心跳包周期计数
+
+u8 internetRemoteServer_portSwitchPeriod = INTERNET_SERVERPORT_SWITCHPERIOD; //远端服务器端口切换周期（网络正常情况下每收到一次心跳回复就赋值刷新，否则 既定x个 周期内未收到心跳回复，即周期为0，就切换端口）
 
 stt_devOpreatDataPonit dev_currentDataPoint = {0}; //周期询访数据点
 stt_agingDataSet_bitHold dev_agingCmd_rcvPassive = {0}; //周期询访时效占位指令缓存 --被动接收
@@ -114,7 +117,7 @@ dtasTX_loadBasic_CUSTOM(socketDataTrans_obj datsObj,
 			dats_Tx[2 + 12] = frame_Type;
 			dats_Tx[3 + 12] = frame_CMD;
 			
-			if(!ifSpecial_CMD)dats_Tx[10 + 12] = DEV_SWITCH_TYPE;	//开关类型填充
+			if(!ifSpecial_CMD)dats_Tx[10 + 12] = SWITCH_TYPE;	//开关类型填充
 			
 			memcpy(&dats_Tx[5 + 12], &MACSTA_ID[1], 5);	//本地MAC填充
 								  
@@ -133,7 +136,7 @@ dtasTX_loadBasic_CUSTOM(socketDataTrans_obj datsObj,
 			dats_Tx[2] 	= frame_Type;
 			dats_Tx[3] 	= frame_CMD;
 			
-			if(!ifSpecial_CMD)dats_Tx[10] = DEV_SWITCH_TYPE;	//开关类型填充
+			if(!ifSpecial_CMD)dats_Tx[10] = SWITCH_TYPE;	//开关类型填充
 			
 			memcpy(&dats_Tx[5], &MACSTA_ID[1], 5);	//本地MAC填充
 								  
@@ -228,33 +231,47 @@ timer_heartBeatKeep_funCB(void *para){
 
 			//状态填装 -实时值
 			dev_currentDataPoint.devStatus_Reference.statusRef_swStatus 	= status_actuatorRelay; //周期询访本地数据点 开关状态更新
+			if(devActionPush_IF.push_IF){ //推送数据加载
+
+				devActionPush_IF.push_IF = 0;
+				dev_currentDataPoint.devStatus_Reference.statusRef_swPush = 0;
+				dev_currentDataPoint.devStatus_Reference.statusRef_swPush |= devActionPush_IF.dats_Push;
+			}
 			dev_currentDataPoint.devStatus_Reference.statusRef_timer		= ifTim_sw_running_FLAG; //周期询访本地数据点 定时器状态更新
 			dev_currentDataPoint.devStatus_Reference.statusRef_devLock		= deviceLock_flag;
 			dev_currentDataPoint.devStatus_Reference.statusRef_delay		= (ifDelay_sw_running_FLAG & 0x02) >> 1;
 			dev_currentDataPoint.devStatus_Reference.statusRef_greenMode	= (ifDelay_sw_running_FLAG & 0x01) >> 0;
 			dev_currentDataPoint.devStatus_Reference.statusRef_nightMode	= ifNightMode_sw_running_FLAG;
-			dev_currentDataPoint.devStatus_Reference.statusRef_horsingLight = 0;
+			dev_currentDataPoint.devStatus_Reference.statusRef_horsingLight	= ifHorsingLight_running_FLAG;
 
 			//属性值填装 -实时值
 			memcpy(&dev_currentDataPoint.devData_timer, datsRead_Temp->swTimer_Tab, 3 * 8);
+			{ //普通定时数据一次性周占位回复特殊处理
+
+				u8 loop = 0;
+				for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){
+
+					if(swTim_onShoot_FLAG & (1 << loop))dev_currentDataPoint.devData_timer[3 * loop] = 0x80; //针对一次性定时查询回复数据，周占位清空恢复
+				}
+			}
 			dev_currentDataPoint.devData_delayer		= delayPeriod_onoff - (delayCnt_onoff / 60);
 			dev_currentDataPoint.devData_delayUpStatus	= delayUp_act;
 			dev_currentDataPoint.devData_greenMode		= delayPeriod_closeLoop;
 			{ //夜间模式数据特殊转换
-				
-				timing_Dats nightDatsTemp_CalibrateTab[2] = {0};
 
-				memcpy(nightDatsTemp_CalibrateTab, datsRead_Temp->devNightModeTimer_Tab, 3 * 2);
-				((nightDatsTemp_CalibrateTab[0].Week_Num & 0x7F) == 0x7F)?(dev_currentDataPoint.devData_nightMode[0] = 1):(dev_currentDataPoint.devData_nightMode[0] = 0);
-				(nightDatsTemp_CalibrateTab[0].if_Timing)?(dev_currentDataPoint.devData_nightMode[1] = 1):(dev_currentDataPoint.devData_nightMode[1] = 0);
-				dev_currentDataPoint.devData_nightMode[2] = nightDatsTemp_CalibrateTab[0].Hour;
-				dev_currentDataPoint.devData_nightMode[3] = nightDatsTemp_CalibrateTab[0].Minute;
-				dev_currentDataPoint.devData_nightMode[4] = nightDatsTemp_CalibrateTab[1].Hour;
-				dev_currentDataPoint.devData_nightMode[5] = nightDatsTemp_CalibrateTab[1].Minute;
+				((datsRead_Temp->devNightModeTimer_Tab[0] & 0x7F) == 0x7F)?(dev_currentDataPoint.devData_nightMode[0] = 1):(dev_currentDataPoint.devData_nightMode[0] = 0);
+				((datsRead_Temp->devNightModeTimer_Tab[0] & 0x80) == 0x80)?(dev_currentDataPoint.devData_nightMode[1] = 1):(dev_currentDataPoint.devData_nightMode[1] = 0);
+				dev_currentDataPoint.devData_nightMode[2] = datsRead_Temp->devNightModeTimer_Tab[1];
+				dev_currentDataPoint.devData_nightMode[3] = datsRead_Temp->devNightModeTimer_Tab[2];
+				dev_currentDataPoint.devData_nightMode[4] = datsRead_Temp->devNightModeTimer_Tab[4];
+				dev_currentDataPoint.devData_nightMode[5] = datsRead_Temp->devNightModeTimer_Tab[5];
+
+//				printf_datsHtoA("btMode data upload:", dev_currentDataPoint.devData_nightMode, 6);
 			}
 			memcpy(&dev_currentDataPoint.devData_bkLight[0], &(datsRead_Temp->bkColor_swON), 1);
 			memcpy(&dev_currentDataPoint.devData_bkLight[1], &(datsRead_Temp->bkColor_swOFF), 1);
 			dev_currentDataPoint.devData_devReset = 0;
+			memcpy(dev_currentDataPoint.devData_switchBitBind, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER);
 
 			//时效操作占位指令填装
 			switch(dtModeKeepAcess_currentCmd){
@@ -282,9 +299,9 @@ timer_heartBeatKeep_funCB(void *para){
 			frameTx_dataLen += 6; //空出1Byte MAC
 			frameTx_temp[frameTx_dataLen ++]	= dtModeKeepAcess_currentCmd; //命令
 			frameTx_temp[frameTx_dataLen ++]	= SWITCH_TYPE; //开关信息
-			frameTx_temp[frameTx_dataLen ++]	= 0; //devVersion_reserve
-			frameTx_temp[frameTx_dataLen ++]	= 0; //devVersion_reserve
-			frameTx_temp[frameTx_dataLen ++]	= 0; //devVersion_reserve
+			frameTx_temp[frameTx_dataLen ++]	= (u8)(nwkZigb_currentPANID >> 8); //PANID填装
+			frameTx_temp[frameTx_dataLen ++]	= (u8)(nwkZigb_currentPANID >> 0); 
+			frameTx_temp[frameTx_dataLen ++]	= DEVICE_VERSION_NUM; //设备版本号填装
 			frameTx_temp[frameTx_dataLen ++]	= sysTimeZone_H; //时区_时
 			frameTx_temp[frameTx_dataLen ++]	= sysTimeZone_M; //时区_分
 			memcpy(&frameTx_temp[frameTx_dataLen], &dev_currentDataPoint, sizeof(stt_devOpreatDataPonit)); //直接数据指针对齐，数据点直接数据帧待发缓存进行数据结构强怼
@@ -293,7 +310,7 @@ timer_heartBeatKeep_funCB(void *para){
 			frameTx_temp[1] 					= frameTx_dataLen;
 			frameTx_temp[frameTx_dataLen - 1] = frame_Check(&frameTx_temp[1], frameTx_dataLen - 2); //校验码最后算
 
-			os_free(datsRead_Temp);
+			if(datsRead_Temp)os_free(datsRead_Temp);
 
 #endif
 
@@ -323,7 +340,7 @@ socketsDataTransProcess_task(void *pvParameters){
 	u8 repeatTX_buff[socketsData_repeatTxLen] = {0};
 	u8 repeatTX_Len = 0;
 
-#define socketsData_datsTxLen	64
+#define socketsData_datsTxLen	72
 	u8 datsTX_buff[socketsData_datsTxLen] = {0};
 	u8 datsTX_Len = 0;
 
@@ -332,6 +349,8 @@ socketsDataTransProcess_task(void *pvParameters){
 		
 	bool socketRespond_IF = false;
 	bool specialCMD_IF = false;
+
+	bool local_ftyRecover_standbyFLG = false; //恢复出厂设置预动作标志
 
 	u8 loop = 0;
 
@@ -383,6 +402,7 @@ socketsDataTransProcess_task(void *pvParameters){
 							mySocketUDPremote_B_serverChange(&rptr_socketDats.dats[6]);
 
 							repeatTX_buff[11] = status_actuatorRelay;
+							repeatTX_buff[12] = DEVICE_VERSION_NUM; 
 
 							repeatTX_buff[14] = (u8)(nwkZigb_currentPANID >> 8);
 							repeatTX_buff[15] = (u8)(nwkZigb_currentPANID >> 0);
@@ -391,14 +411,20 @@ socketsDataTransProcess_task(void *pvParameters){
 							repeatTX_buff[21] = 0x00;  //协调器网络短地址标记 <调试专用>
 
 							specialCMD_IF		= false;
-							socketRespond_IF	= true;
+							socketRespond_IF	= !deviceLock_flag; //上锁不应答
 						
 						}break;
 		
 						case FRAME_MtoSCMD_cmdQuery:{
 
-							
-							
+							repeatTX_buff[11] = status_actuatorRelay;
+							repeatTX_buff[12] = 0;
+							(deviceLock_flag)?(repeatTX_buff[12] |= 0x01):(repeatTX_buff[12] &= ~0x01);
+							(ifNightMode_sw_running_FLAG)?(repeatTX_buff[12] |= 0x02):(repeatTX_buff[12] &= ~0x02);
+
+							specialCMD_IF		= false;
+							socketRespond_IF	= true;
+
 						}break;
 		
 						case FRAME_MtoSCMD_cmdInterface:{
@@ -568,6 +594,10 @@ socketsDataTransProcess_task(void *pvParameters){
 										
 											swTim_onShoot_FLAG 	|= (1 << loop); //一次性定时标志开启
 											rptr_socketDats.dats[14 + loop * 3] |= (1 << (systemTime_current.time_Week - 1)); //强制进行周占位，执行完毕后清除
+											
+										}else{
+
+											swTim_onShoot_FLAG	&= ~(1 << loop); //一次标志关闭
 										}
 									}
 
@@ -752,6 +782,10 @@ socketsDataTransProcess_task(void *pvParameters){
 										swCommand_fromUsr.objRelay = scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus;
 										swCommand_fromUsr.actMethod = relay_OnOff;
 
+										memset(&scenarioOprateDats.scenarioOprate_Unit[loop], 0, 1 * sizeof(scenarioOprateUnit_Attr)); //同时从场景控制表中剔除网关自身
+										memcpy(&scenarioOprateDats.scenarioOprate_Unit[loop], &scenarioOprateDats.scenarioOprate_Unit[loop + 1], (zigB_ScenarioCtrlDataTransASY_QbuffLen - loop - 1) * sizeof(scenarioOprateUnit_Attr));
+										scenarioOprateDats.devNode_num --;
+
 										break;
 									}
 								}
@@ -876,6 +910,8 @@ socketsDataTransProcess_task(void *pvParameters){
 						bool frameCodeCheck_PASS = false; //校验码检查通过标志
 						bool frameMacCheck_PASS  = false; //MAC资质检查通过标志
 
+						internetRemoteServer_portSwitchPeriod = INTERNET_SERVERPORT_SWITCHPERIOD; //远端服务器端口切换周期更新
+
 						os_printf("[Tips_NWK-SKdats]: netGate_hb rvc-<mac:%02X %02X %02X %02X %02X>,<cmd:%02X>.\n", 
 								  rptr_socketDats.dats[2],
 								  rptr_socketDats.dats[3],
@@ -894,8 +930,6 @@ socketsDataTransProcess_task(void *pvParameters){
 
 								case DTMODEKEEPACESS_FRAMECMD_ASR:{
 
-									static bool local_ftyRecover_standbyFLG = false; //恢复出厂设置预动作标志
-
 									/*时效命令判断*///进行时效动作后，清空时效操作位
 									if(memcmp(&agingCmd_Temp, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold))){
 
@@ -909,6 +943,8 @@ socketsDataTransProcess_task(void *pvParameters){
 
 												swCommand_fromUsr.objRelay = dev_dataPointTemp.devStatus_Reference.statusRef_swStatus;
 												swCommand_fromUsr.actMethod = relay_OnOff;
+
+												devActionPush_IF.push_IF = 1;
 
 												os_printf(">>>>>>>>relayStatus reales:%02X, currentVal:%02X.\n", (int)status_actuatorRelay & 0x07, (int)dev_dataPointTemp.devStatus_Reference.statusRef_swStatus);
 											}
@@ -963,6 +999,10 @@ socketsDataTransProcess_task(void *pvParameters){
 												
 													swTim_onShoot_FLAG	|= (1 << loop); //一次标志开启
 													dev_dataPointTemp.devData_timer[loop * 3] |= (1 << (systemTime_current.time_Week - 1)); //强行进行当前周占位，当次执行完毕后清除
+													
+												}else{
+
+													swTim_onShoot_FLAG	&= ~(1 << loop); //一次标志关闭
 												}
 											}
 											memcpy(datsSave_Temp.swTimer_Tab, dev_dataPointTemp.devData_timer, 8 * 3); //本地存储更新
@@ -970,9 +1010,9 @@ socketsDataTransProcess_task(void *pvParameters){
 											
 											datsTiming_getRealse(); //本地运行数据更新
 
-											os_printf(">>>>>>>>agingCmd timer coming, dataTab3:[%02X-%02X-%02X].\n", (int)dev_dataPointTemp.devData_timer[6],
-																													 (int)dev_dataPointTemp.devData_timer[7],
-																													 (int)dev_dataPointTemp.devData_timer[8]);
+											os_printf(">>>>>>>>agingCmd timer coming, dataTab1:[%02X-%02X-%02X].\n", (int)dev_dataPointTemp.devData_timer[0],
+																													 (int)dev_dataPointTemp.devData_timer[1],
+																													 (int)dev_dataPointTemp.devData_timer[2]);
 										}
 
 										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_greenModeSetOpreat){  //绿色模式设置操作，需要时效
@@ -991,17 +1031,20 @@ socketsDataTransProcess_task(void *pvParameters){
 											
 											(dev_dataPointTemp.devData_nightMode[0])?(dataTemp[0] |= 0x7f):(dataTemp[0] &= ~0x7f);
 											(dev_dataPointTemp.devData_nightMode[1])?(dataTemp[0] |= 0x80):(dataTemp[0] &= ~0x80);
-											dataTemp[1] = dev_dataPointTemp.devData_nightMode[2] << 3; //下标2， 高5位， 时
-											dataTemp[2] = dev_dataPointTemp.devData_nightMode[3];	   //下标3， 高8位， 分
-											dataTemp[4] = dev_dataPointTemp.devData_nightMode[4] << 3; //下标4， 高5位， 时
-											dataTemp[5] = dev_dataPointTemp.devData_nightMode[5];	   //下标5， 高8位，	分
+											dataTemp[1] = dev_dataPointTemp.devData_nightMode[2]; //下标2， 低5位， 时
+											dataTemp[2] = dev_dataPointTemp.devData_nightMode[3]; //下标3， 全8位， 分
+											dataTemp[4] = dev_dataPointTemp.devData_nightMode[4]; //下标4， 低5位， 时
+											dataTemp[5] = dev_dataPointTemp.devData_nightMode[5]; //下标5， 全8位，	分
 											
 											memcpy(datsSave_Temp.devNightModeTimer_Tab, dataTemp, 3 * 2); //本地存储更新
 											devParam_flashDataSave(obj_devNightModeTimer_Tab, datsSave_Temp); //本地存储动作执
+											vTaskDelay(2);
 
 											datsTiming_getRealse(); //本地运行数据更新
 
 											os_printf(">>>>>>>>agingCmd nightMode coming.\n");
+
+//											printf_datsHtoA("btMode data download:", dev_dataPointTemp.devData_nightMode, 6);
 										}
 
 										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_bkLightSetOpreat){  //背光灯设置操作，需要时效
@@ -1016,9 +1059,34 @@ socketsDataTransProcess_task(void *pvParameters){
 
 										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_horsingLight){  //跑马灯设置操作，需要时效
 
-											
+											os_printf(">>>>>>>>agingCmd horsingLight coming, opreatData:%02X.\n", (int)dev_dataPointTemp.devStatus_Reference.statusRef_horsingLight);
+											ifHorsingLight_running_FLAG = dev_dataPointTemp.devStatus_Reference.statusRef_horsingLight;
+											if(ifHorsingLight_running_FLAG)counter_ifTipsFree = 0;
+											else tips_statusChangeToNormal(); //tips立即恢复
 										}
-										
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat){ //开关位互控绑定设置操作，需要时效
+
+											u8 loop = 0;
+											
+											for(loop = 0; loop < 3; loop ++){
+											
+												if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat & (1 << loop)){
+												
+													CTRLEATHER_PORT[loop] = dev_dataPointTemp.devData_switchBitBind[loop]; //本地运行缓存更新
+												}
+											}
+											
+											memcpy(datsSave_Temp.port_ctrlEachother, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER); //本地存储更新
+											devParam_flashDataSave(obj_port_ctrlEachother, datsSave_Temp); //本地存储动作执行
+											enum_zigbFunMsg mptr_zigbFunRm = msgFun_portCtrlEachoRegister; //即刻注册互控端口
+											xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
+
+											os_printf(">>>>>>>>agingCmd switchBindSet coming, opreatBitHold:%02X bindData:%02X %02X %02X.\n", (int)dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat,
+																																			  (int)dev_dataPointTemp.devData_switchBitBind[0], 
+																																			  (int)dev_dataPointTemp.devData_switchBitBind[1], 
+																																			  (int)dev_dataPointTemp.devData_switchBitBind[2]);
+										}
 									}
 									else{
 
@@ -1027,7 +1095,9 @@ socketsDataTransProcess_task(void *pvParameters){
 
 											local_ftyRecover_standbyFLG = 0;
 											os_printf(">>>>>>>>factory recover doing now!.\n");
-										
+
+											devData_recoverFactory();
+											vTaskDelay(10);
 											system_restart();
 										}
 									}

@@ -18,6 +18,7 @@ typedef enum{
 	status_Normal,
 	status_Night,
 	status_tipsNwkOpen,
+	status_touchReset,
 	status_tipsAPFind,
 }tips_Status;
 
@@ -46,10 +47,12 @@ typedef enum beepsMode{
 	beepsComplete,
 }enum_beeps;
 
-extern u8 counter_tipsAct;
-extern u8 counter_ifTipsFree;
+extern u16 counter_tipsAct;
+extern u8  counter_ifTipsFree;
 
 extern u8 timeCount_zigNwkOpen;
+
+extern bool ifHorsingLight_running_FLAG;
 
 extern tips_Status devTips_status;
 extern tips_devNwkStatus devNwkTips_status;
@@ -63,6 +66,8 @@ void beeps_usrActive(u8 tons, u8 time, u8 loop);
 void tips_statusChangeToNormal(void);
 void tips_statusChangeToAPFind(void);
 void tips_statusChangeToZigbNwkOpen(u8 timeopen);
+void tips_statusChangeToTouchReset(void);
+void tips_statusChangeToFactoryRecover(void);
 void tipsLED_rgbColorSet(u8 tipsRly_Num, u8 color_R, u8 color_G, u8 color_B);
 void usrTips_ThreadStart(void);
 

@@ -21,39 +21,31 @@ LOCAL xTaskHandle pxTaskHandle_threadRelayActing;
 LOCAL void ICACHE_FLASH_ATTR
 relay_statusReales(void){
 	
-	if(DEV_actReserve & 0x01)(status_actuatorRelay & 0x01)?(PIN_RELAY_1 = 1):(PIN_RELAY_1 = 0);
-	if(DEV_actReserve & 0x02)(status_actuatorRelay & 0x02)?(PIN_RELAY_2 = 1):(PIN_RELAY_2 = 0);
-	if(DEV_actReserve & 0x04)(status_actuatorRelay & 0x04)?(PIN_RELAY_3 = 1):(PIN_RELAY_3 = 0);
-
-	tips_statusChangeToNormal(); //tips响应
-}
-
-LOCAL void ICACHE_FLASH_ATTR
-actuatorRelay_Init(void){
-
-	u8 statusTemp = 0;
-
-	if(relayStatus_ifSave = statusSave_enable){
+	switch(SWITCH_TYPE){
+	
+		case SWITCH_TYPE_SWBIT1:{ //继电器位位置调整 2对1
 		
-		stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
-	
-		statusTemp = (u8)(datsRead_Temp->rlyStaute_flg);
-
-		status_actuatorRelay = statusTemp;
-	
-		if(datsRead_Temp)os_free(datsRead_Temp);
-	
-	}else{
-
-		stt_usrDats_privateSave datsSave_Temp = {0};
+			if(DEV_actReserve & 0x02)(status_actuatorRelay & 0x01)?(PIN_RELAY_1 = 1):(PIN_RELAY_1 = 0);
+			
+		}break;
 		
-		status_actuatorRelay = statusTemp;
-
-		datsSave_Temp.rlyStaute_flg = statusTemp;
-		devParam_flashDataSave(obj_rlyStaute_flg, datsSave_Temp);
+		case SWITCH_TYPE_SWBIT2:{ //继电器位位置调整 3对2
+		
+			if(DEV_actReserve & 0x01)(status_actuatorRelay & 0x01)?(PIN_RELAY_1 = 1):(PIN_RELAY_1 = 0);
+			if(DEV_actReserve & 0x04)(status_actuatorRelay & 0x02)?(PIN_RELAY_2 = 1):(PIN_RELAY_2 = 0);
+		
+		}break;
+		
+		case SWITCH_TYPE_SWBIT3:{ //继电器位位置保持
+		
+			if(DEV_actReserve & 0x01)(status_actuatorRelay & 0x01)?(PIN_RELAY_1 = 1):(PIN_RELAY_1 = 0);
+			if(DEV_actReserve & 0x02)(status_actuatorRelay & 0x02)?(PIN_RELAY_2 = 1):(PIN_RELAY_2 = 0);
+			if(DEV_actReserve & 0x04)(status_actuatorRelay & 0x04)?(PIN_RELAY_3 = 1):(PIN_RELAY_3 = 0);
+		
+		}break;
 	}
 
-	relay_statusReales();
+	tips_statusChangeToNormal(); //tips响应
 }
 
 /*继电器动作*/
@@ -89,9 +81,15 @@ actuatorRelay_Act(relay_Command dats){
 
 	devActionPush_IF.dats_Push = 0;
 	devActionPush_IF.dats_Push |= (status_actuatorRelay & 0x07); //当前开关状态位填装<低三位>
-	if(		(statusTemp & 0x01) != (status_actuatorRelay & 0x01))devActionPush_IF.dats_Push |= 0x20; //更改值填装<高三位>第一位
-	else if((statusTemp & 0x02) != (status_actuatorRelay & 0x02))devActionPush_IF.dats_Push |= 0x40; //更改值填装<高三位>第二位
-	else if((statusTemp & 0x04) != (status_actuatorRelay & 0x04))devActionPush_IF.dats_Push |= 0x80; //更改值填装<高三位>第三位
+//	/*优先方式*/
+//	if(		(statusTemp & 0x01) != (status_actuatorRelay & 0x01))devActionPush_IF.dats_Push |= 0x20; //更改值填装<高三位>第一位
+//	else if((statusTemp & 0x02) != (status_actuatorRelay & 0x02))devActionPush_IF.dats_Push |= 0x40; //更改值填装<高三位>第二位
+//	else if((statusTemp & 0x04) != (status_actuatorRelay & 0x04))devActionPush_IF.dats_Push |= 0x80; //更改值填装<高三位>第三位
+	/*非优先方式*/
+	if((statusTemp & 0x01) != (status_actuatorRelay & 0x01))devActionPush_IF.dats_Push |= 0x20; //更改值填装<高三位>第一位
+	if((statusTemp & 0x02) != (status_actuatorRelay & 0x02))devActionPush_IF.dats_Push |= 0x40; //更改值填装<高三位>第二位
+	if((statusTemp & 0x04) != (status_actuatorRelay & 0x04))devActionPush_IF.dats_Push |= 0x80; //更改值填装<高三位>第三位
+
 	if(devStatus_pushIF){
 
 		devStatus_pushIF = false;
@@ -103,10 +101,17 @@ actuatorRelay_Act(relay_Command dats){
 	
 	if(relayStatus_ifSave == statusSave_enable){ //状态记忆更新
 
+#if(RELAYSTATUS_REALYTIME_ENABLEIF)
+
+		devParamDtaaSave_relayStatusRealTime(status_actuatorRelay);
+#else
+
 		stt_usrDats_privateSave datsSave_Temp = {0};
 
 		datsSave_Temp.rlyStaute_flg = status_actuatorRelay;
 		devParam_flashDataSave(obj_rlyStaute_flg, datsSave_Temp);
+		
+#endif
 	}
 }
 
@@ -127,6 +132,31 @@ relayActingProcess_task(void *pvParameters){
 	}
 
 	vTaskDelete(NULL);
+}
+
+void ICACHE_FLASH_ATTR
+actuatorRelay_Init(void){
+
+	if(relayStatus_ifSave = statusSave_enable){
+
+#if(RELAYSTATUS_REALYTIME_ENABLEIF)
+
+		swCommand_fromUsr.objRelay = (u8)devDataRecovery_relayStatus();
+		swCommand_fromUsr.actMethod = relay_OnOff;
+
+#else
+
+		stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
+
+		swCommand_fromUsr.objRelay = (u8)(datsRead_Temp->rlyStaute_flg);
+		swCommand_fromUsr.actMethod = relay_OnOff;
+
+		if(datsRead_Temp)os_free(datsRead_Temp);
+#endif
+
+	}
+
+	os_printf("status relay recovery data read is: %02X.\n", swCommand_fromUsr.objRelay);
 }
 
 void ICACHE_FLASH_ATTR

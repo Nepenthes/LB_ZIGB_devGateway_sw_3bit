@@ -52,11 +52,16 @@
 #define zigB_remoteDataTransASY_txReapt			10	//单条数据请求重复次数
 #define zigB_remoteDataTransASY_txUartOnceWait	4	//异步串口通信远端数据请求单次等待时间 单位：10ms
 
-#define zigB_ScenarioCtrlDataTransASY_opreatOnceNum		10	//场景控制逻辑业务单轮操作单位数目(大包场次分批次异步发送，单轮/单批次数目)
-#define zigB_ScenarioCtrlDataTransASY_QbuffLen 			100 //本地非阻塞远端场景控制数据请求，缓存队列
-#define zigB_ScenarioCtrlDataTransASY_txPeriod			300 //单条场景控制数据请求周期	单位：ms
-#define zigB_ScenarioCtrlDataTransASY_txReapt			20	//单条场景控制数据请求重复次数
-#define zigB_ScenarioCtrlDataTransASY_txUartOnceWait	4	//异步串口通信远端场景控制数据请求单次等待时间 单位：10ms
+#define zigB_ScenarioCtrlDataTransASY_txBatchs_EN			0	//异步串口通信远端场景控制数据请求多批次分发使能
+#define zigB_ScenarioCtrlDataTransASY_opreatOnceNum			10	//场景控制逻辑业务单轮操作单位数目(大包场次分批次异步发送，单轮/单批次数目)
+
+#define zigB_ScenarioCtrlDataTransASY_timeRoundPause		0	//数据发送轮次间距暂歇时间系数 单位：视业务调用周期而定，近似单位为 10ms/per
+
+#define zigB_ScenarioCtrlDataTransASY_QbuffLen 				100 //本地非阻塞远端场景控制数据请求，缓存队列
+#define zigB_ScenarioCtrlDataTransASY_txPeriod				200 //单条场景控制数据请求周期	单位：ms
+#define zigB_ScenarioCtrlDataTransASY_txReapt				30	//单条场景控制数据请求重复次数
+#define zigB_ScenarioCtrlDataTransASY_txTimeWaitOnceBasic	2	//异步串口通信远端场景控制数据请求单次保底等待时间 单位：10ms/per
+#define zigB_ScenarioCtrlDataTransASY_txTimeWaitOnceStep	2	//异步串口通信远端场景控制数据请求单次等待时间延长步距 单位：10ms/per
 
 typedef enum{
 
@@ -66,7 +71,8 @@ typedef enum{
 	msgFun_portCtrlEachoRegister, //互控端点（通讯簇）注册
 	msgFun_panidRealesNwkCreat, //本地zigb主机panid更新
 	msgFun_scenarioCrtl, //场景集群控制
-	msgFun_dtPeriodHoldPst //使子节点设备周期性远端通信挂起
+	msgFun_dtPeriodHoldPst, //使子节点设备周期性远端通信挂起
+	msgFun_dtPeriodHoldCancelAdvance,  //使子节点设备周期性远端通信挂起提前结束
 }enum_zigbFunMsg;
 
 typedef struct{
@@ -84,7 +90,7 @@ typedef struct{
 
 typedef struct{
 
-	u8 dats[96];
+	u8 dats[128 + 25];
 	u8 datsLen;
 }sttUartRcv_rmoteDatComming;
 
@@ -170,7 +176,7 @@ typedef struct ZigB_datsRXAttr_typeMSG{
 	u16	 ClusterID;		//簇ID
 	u8	 LQI;			//链接质量
 	u8 	 datsLen;		//数据长度
-	u8	 dats[100];		//数据
+	u8	 dats[128];		//数据
 }datsAttr_ZigbRX_tpMSG;
 
 typedef struct ZigB_datsRXAttr_typeONLINE{

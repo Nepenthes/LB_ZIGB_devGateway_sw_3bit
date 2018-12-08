@@ -7,6 +7,8 @@
 
 #include "spi_interface.h"
 
+#include "datsManage.h"
+
 #include "usrInterface_keylbutton.h"
 #include "usrInterface_Tips.h"
 #include "timer_Activing.h"
@@ -347,9 +349,9 @@ timerFunCB_hw595and597datsReales(void *para){
 	static u8 period_rgbCnt[RLY_TIPS_NUM][TIPS_BASECOLOR_NUM] = {0};
 
 	datsOut_temp |= (u8)usrDats_actuator.conDatsOut_ZigbeeRst 	<< 1;	//控制脚输出值加载
-	datsOut_temp |= (u8)usrDats_actuator.conDatsOut_rly_2 		<< 7;
+	datsOut_temp |= (u8)usrDats_actuator.conDatsOut_rly_2 		<< 5;
 	datsOut_temp |= (u8)usrDats_actuator.conDatsOut_rly_1 		<< 6;
-	datsOut_temp |= (u8)usrDats_actuator.conDatsOut_rly_0 		<< 5;
+	datsOut_temp |= (u8)usrDats_actuator.conDatsOut_rly_0 		<< 7;
 	
 //	datsOut_temp |= 0x1D; //Tips硬件复位（高电平点熄灭）
 	datsOut_temp &= ~0x1D; //Tips硬件复位（低电平点熄灭）
@@ -380,17 +382,35 @@ timerFunCB_hw595and597datsReales(void *para){
 						
 						period_rgbCnt[loop][0] --;
 //						datsOut_temp &= ~(1 << loop);
-						datsOut_temp |= 1 << loop;
+						if(DEV_actReserve & 0x04)datsOut_temp |= 1 << loop; //指示可用核准
 
 					}break;
 
-					default:{ //正常连续引脚位
+					case 1:{ //正常连续引脚位
 
 						period_rgbCnt[loop][0] --;
 //						datsOut_temp &= ~(2 << loop);
-						datsOut_temp |= 2 << loop;
-						
+						if(DEV_actReserve & 0x02)datsOut_temp |= 2 << loop; //指示可用核准
+
 					}break;
+
+					case 2:{ //正常连续引脚位
+
+						period_rgbCnt[loop][0] --;
+//						datsOut_temp &= ~(2 << loop);
+						if(DEV_actReserve & 0x01)datsOut_temp |= 2 << loop; //指示可用核准
+
+					}break;
+
+					case 3:{ //正常连续引脚位
+
+						period_rgbCnt[loop][0] --;
+//						datsOut_temp &= ~(2 << loop);
+						datsOut_temp |= 2 << loop;						
+
+					}break;
+
+					default:{}break;
 				}				
 			}
 		}
@@ -409,17 +429,35 @@ timerFunCB_hw595and597datsReales(void *para){
 						
 						period_rgbCnt[loop][1] --;
 //						datsOut_temp &= ~(1 << loop);
-						datsOut_temp |= 1 << loop;
+						if(DEV_actReserve & 0x04)datsOut_temp |= 1 << loop; //指示可用核准
 
 					}break;
 
-					default:{ //正常连续引脚位
+					case 1:{ //正常连续引脚位
+
+						period_rgbCnt[loop][1] --;
+//						datsOut_temp &= ~(2 << loop);
+						if(DEV_actReserve & 0x02)datsOut_temp |= 2 << loop; //指示可用核准						
+
+					}break;
+
+					case 2:{ //正常连续引脚位
+
+						period_rgbCnt[loop][1] --;
+//						datsOut_temp &= ~(2 << loop);
+						if(DEV_actReserve & 0x01)datsOut_temp |= 2 << loop; //指示可用核准						
+
+					}break;
+
+					case 3:{ //正常连续引脚位
 
 						period_rgbCnt[loop][1] --;
 //						datsOut_temp &= ~(2 << loop);
 						datsOut_temp |= 2 << loop;
-						
+
 					}break;
+
+					default:{}break;
 				}			
 			}
 		}
@@ -438,17 +476,35 @@ timerFunCB_hw595and597datsReales(void *para){
 						
 						period_rgbCnt[loop][2] --;
 //						datsOut_temp &= ~(1 << loop);
-						datsOut_temp |= 1 << loop;
+						if(DEV_actReserve & 0x04)datsOut_temp |= 1 << loop; //指示可用核准
 
 					}break;
 
-					default:{ //正常连续引脚位
+					case 1:{ //正常连续引脚位
+
+						period_rgbCnt[loop][2] --;
+//						datsOut_temp &= ~(2 << loop);
+						if(DEV_actReserve & 0x02)datsOut_temp |= 2 << loop; //指示可用核准						
+
+					}break;
+
+					case 2:{ //正常连续引脚位
+
+						period_rgbCnt[loop][2] --;
+//						datsOut_temp &= ~(2 << loop);
+						if(DEV_actReserve & 0x01)datsOut_temp |= 2 << loop; //指示可用核准						
+
+					}break;
+
+					case 3:{ //正常连续引脚位
 
 						period_rgbCnt[loop][2] --;
 //						datsOut_temp &= ~(2 << loop);
 						datsOut_temp |= 2 << loop;
-						
+
 					}break;
+
+					default:{}break;
 				}		
 			}
 		}
@@ -472,8 +528,8 @@ timerFunCB_hw595and597datsReales(void *para){
 	usrDats_sensor.usrKeyIn_rly_2 	= (datsIn_temp & 0x08) >> 3;
 	usrDats_sensor.usrKeyIn_rly_1 	= (datsIn_temp & 0x01) >> 0;
 	usrDats_sensor.usrKeyIn_rly_0 	= (datsIn_temp & 0x04) >> 2;
-	usrDats_sensor.usrDcode_3 		= (datsIn_temp & 0x80) >> 7;
-	usrDats_sensor.usrDcode_2 		= (datsIn_temp & 0x40) >> 6;
+	usrDats_sensor.usrDcode_3 		= (datsIn_temp & 0x40) >> 6;
+	usrDats_sensor.usrDcode_2 		= (datsIn_temp & 0x80) >> 7;
 	usrDats_sensor.usrDcode_1 		= (datsIn_temp & 0x20) >> 5;
 	usrDats_sensor.usrDcode_0 		= (datsIn_temp & 0x10) >> 4;
 

@@ -76,5 +76,4 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/esp8266/uart_register.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/smartconfig.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/spi_flash.h \
- D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/pwm.h \
- D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/esp_common.h
+ D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/pwm.h

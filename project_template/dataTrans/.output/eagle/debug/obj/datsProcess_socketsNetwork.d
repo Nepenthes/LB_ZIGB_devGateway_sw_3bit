@@ -78,7 +78,6 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/smartconfig.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/spi_flash.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/pwm.h \
- D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/esp_common.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/freertos/queue.h \
  ../include/datsProcess_udpLocal_A.h ../include/datsProcess_udpRemote_B.h \
  ../include/datsProcess_tcpRemote_A.h \
@@ -86,4 +85,4 @@
  ../include/timer_Activing.h ../include/hwPeripherial_Actuator.h \
  ../include/bsp_Hardware.h ../include/usrParsingMethod.h \
  ../include/datsManage.h ../include/datsProcess_uartZigbee.h \
- ../include/datsManage.h
+ ../include/datsManage.h ../include/usrInterface_Tips.h

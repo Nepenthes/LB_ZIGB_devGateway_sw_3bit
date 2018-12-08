@@ -15,6 +15,10 @@
 
 #include "datsProcess_socketsNetwork.h"
 
+extern u8 internetRemoteServer_portSwitchPeriod;
+
+bool udpRemote_B_refreshFLG = false; //端口更新标志，更新时暂停对应udp_socket业务操作
+
 LOCAL struct espconn infoTemp_connUDP_remote_B;
 LOCAL esp_udp ssdp_udp_remote_B;	
 /*---------------------------------------------------------------------------------------------*/
@@ -150,7 +154,7 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 
 						u8 local_scenarioRespond[11] = {0};
 						memcpy(&local_scenarioRespond[0], pdata, 9); //前段复制
-						memcpy(&local_scenarioRespond[9], &pdata[len - 2], 2); //后端复制
+						memcpy(&local_scenarioRespond[9], &pdata[len - 2], 2); //后段复制
 						espconn_sent(&infoTemp_connUDP_remote_B, local_scenarioRespond, 11); //向服务器回码
 					
 						u16 dats_Len = (u16)(*(pdata + 1)) * 6 + 11; //实际帧长（数据包帧长为操作开关个数）
@@ -185,7 +189,7 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 						else{ //打印错误分析
 
 							os_printf("scenarioCtl parsing fail, {frameDataLen:%04d<-->actualDataLen:%04d, frameTargetMAC:%02X %02X %02X %02X %02X, actualMAC:%02X %02X %02X %02X %02X}<<<<.\n", 
-									  (*(pdata + 1)) * 6 + 10,
+									  (*(pdata + 1)) * 6 + 11,
 									  len,
 									  *(pdata + 4),
 									  *(pdata + 5),
@@ -222,26 +226,25 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 void ICACHE_FLASH_ATTR
 UDPremoteB_datsSend(u8 dats[], u16 datsLen){
 
-	sint8 res = espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
+	sint8 res = ESPCONN_OK;
 
-	if(res){
+	if(!udpRemote_B_refreshFLG)res = espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
+
+	if(res == ESPCONN_ARG){
 
 		os_printf("[Tips_socketUDP_B]: msg send fail, res:%d, socketInfoptr:%X, dataPtr:%X, dataLen:%d\n", res, &infoTemp_connUDP_remote_B, dats, datsLen);
-
-		espconn_disconnect(&infoTemp_connUDP_remote_B); //socket重连
-		espconn_delete(&infoTemp_connUDP_remote_B);
-		mySocketUDPremote_B_buildInit();
+		udpRemote_B_refreshFLG = true;
+		internetRemoteServer_portSwitchPeriod = 0;
 	}
 
 //	espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
 }
 
 void ICACHE_FLASH_ATTR
-mySocketUDPremote_B_buildAct(u8 refRemote_IP[4]){
+mySocketUDPremote_B_buildAct(u8 refRemote_IP[4], int serverPort){
 
 	memcpy(ssdp_udp_remote_B.remote_ip, refRemote_IP, 4);
-//	ssdp_udp_remote_B.remote_port = 80;
-	ssdp_udp_remote_B.remote_port = 4000;
+	ssdp_udp_remote_B.remote_port = serverPort;
 	ssdp_udp_remote_B.local_port = espconn_port(); //建立远端udp链接
 	infoTemp_connUDP_remote_B.type = ESPCONN_UDP;
 	
@@ -264,7 +267,7 @@ mySocketUDPremote_B_serverChange(u8 remoteIP_toChg[4]){
 		devParam_flashDataSave(obj_serverIP_default, datsSave_Temp);
 		espconn_disconnect(&infoTemp_connUDP_remote_B);
 		espconn_delete(&infoTemp_connUDP_remote_B);
-		mySocketUDPremote_B_buildAct(remoteIP_toChg);
+		mySocketUDPremote_B_buildAct(remoteIP_toChg, REMOTE_SERVERPORT_DEFULT);
 		os_printf("[Tips_socketUDP_B]: UDP remoteB serverIP change to %d.%d.%d.%d cmp.!!!\n", 	remoteIP_toChg[0],
 																								remoteIP_toChg[1],
 																								remoteIP_toChg[2],
@@ -279,11 +282,30 @@ mySocketUDPremote_B_serverChange(u8 remoteIP_toChg[4]){
 }
 
 void ICACHE_FLASH_ATTR
+mySocketUDPremote_B_portChange(int remotePort_toChg){
+
+	espconn_delete(&infoTemp_connUDP_remote_B);
+
+	ssdp_udp_remote_B.remote_port = remotePort_toChg;
+	ssdp_udp_remote_B.local_port = espconn_port(); //建立远端udp链接
+	infoTemp_connUDP_remote_B.type = ESPCONN_UDP;
+	infoTemp_connUDP_remote_B.proto.udp = &(ssdp_udp_remote_B);
+
+	espconn_create(&infoTemp_connUDP_remote_B);
+
+	udpRemote_B_refreshFLG = false;
+
+	os_printf("[Tips_socketUDP_B]: remoteServer port change to %d cmp!!!\n", remotePort_toChg);
+}
+
+void ICACHE_FLASH_ATTR
 mySocketUDPremote_B_buildInit(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
-	mySocketUDPremote_B_buildAct(datsRead_Temp->serverIP_default);
+	mySocketUDPremote_B_buildAct(datsRead_Temp->serverIP_default, REMOTE_SERVERPORT_DEFULT);
 //	mySocketUDPremote_B_buildAct((u8 *)serverRemote_IP_Lanbon);
+
+	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
 

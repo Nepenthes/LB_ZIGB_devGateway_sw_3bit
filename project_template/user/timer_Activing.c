@@ -136,6 +136,7 @@ localSystime_logOut(void){
 				(int)sysTimeZone_H);
 	
    os_printf("reserve heap : %d. \n", system_get_free_heap_size());
+   os_printf("zigbNwk reserveNode num : %d. \n", zigbNwkReserveNodeNum_currentValue);
 }
 
 void ICACHE_FLASH_ATTR
@@ -224,7 +225,10 @@ timActingProcess_task(void *pvParameters){
 	stt_usrDats_privateSave datsSave_Temp = {0};
 	stt_usrDats_privateSave *datsRead_Temp;
 
-	bool timeUp_actionDone_flg = false; //同一分钟内定时器响应动作完成标志<同一分钟内只响应一次定时动作>
+	u8 timeUp_actionDone_flg = false; //同一分钟内定时器响应动作完成标志<同一分钟内只响应一次定时动作>
+
+	u16 log_CountA = 0;
+	u16 log_CountB = 0;
 
 	u8 loop = 0;
 
@@ -232,13 +236,12 @@ timActingProcess_task(void *pvParameters){
 
 		{ //调试代码，当前系统本地时间log输出
 			
-			u16 log_period = 300;
-			static u16 log_Count = 0;
+			u16 const log_period = 300;
 			
-			if(log_Count < log_period)log_Count ++;
+			if(log_CountA < log_period)log_CountA ++;
 			else{
 			
-				log_Count = 0;
+				log_CountA = 0;
 				
 				localSystime_logOut();
 			}
@@ -265,25 +268,60 @@ timActingProcess_task(void *pvParameters){
 			ifNightMode_sw_running_FLAG = true;
 			
 		}else{
+
+//			{ //调试输出
+//				
+//				const u16 log_period = 100;
+//				
+// 				if(log_CountB < log_period)log_CountB ++;
+//				else{
+//				
+//					log_CountB = 0;
+//					
+//					os_printf(">>>ntMode_Tab1:%d, ntMode_Tab2:%d, timeCur:%d\n", ((u16)nightDatsTemp_CalibrateTab[0].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[0].Minute),
+//																	  		  	 ((u16)nightDatsTemp_CalibrateTab[1].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[1].Minute),
+//																	  		  	 ((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute));
+//				}
+//			}
 			
-			if(nightDatsTemp_CalibrateTab[0].if_Timing){ //定时使能判断
+			bool timeTab_reserveFLG = false;
+			u16 minutesTemp_CalibrateTab_A 	 = ((u16)nightDatsTemp_CalibrateTab[0].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[0].Minute),
+				minutesTemp_CalibrateTab_B 	 = ((u16)nightDatsTemp_CalibrateTab[1].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[1].Minute),
+				minutesTemp_CalibrateTab_cur = ((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute);
 			
-				if(((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) >=  ((u16)nightDatsTemp_CalibrateTab[0].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[0].Minute) && //定时区间判断
-				   ((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) < ((u16)nightDatsTemp_CalibrateTab[1].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[1].Minute)){
-				   
-					ifNightMode_sw_running_FLAG = true;
-					   
-				}else{
+			(minutesTemp_CalibrateTab_A < minutesTemp_CalibrateTab_B)?(timeTab_reserveFLG = false):(timeTab_reserveFLG = true); //时间表是否反序定义
+			
+			if(nightDatsTemp_CalibrateTab[0].if_Timing){ //使能判断
 				
-					ifNightMode_sw_running_FLAG = false;
+				if(!timeTab_reserveFLG){ //时段反序判断 -顺序
+				
+					((minutesTemp_CalibrateTab_cur > minutesTemp_CalibrateTab_A)&&\
+					 (minutesTemp_CalibrateTab_cur <= minutesTemp_CalibrateTab_B))?\
+						(ifNightMode_sw_running_FLAG = 1):(ifNightMode_sw_running_FLAG = 0);
+				
+				}else{ //时段反序判断 -反序
+				
+					((minutesTemp_CalibrateTab_cur > minutesTemp_CalibrateTab_A)||\
+					 (minutesTemp_CalibrateTab_cur <= minutesTemp_CalibrateTab_B))?\
+						(ifNightMode_sw_running_FLAG = 1):(ifNightMode_sw_running_FLAG = 0);
 				}
 				
-			}else{
+	//			if(((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) >  ((u16)nightDatsTemp_CalibrateTab[0].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[0].Minute) && 
+	//			   ((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) <= ((u16)nightDatsTemp_CalibrateTab[1].Hour * 60 + (u16)nightDatsTemp_CalibrateTab[1].Minute)){
+	//			   
+	//				ifNightMode_sw_running_FLAG = 1;
+	//				   
+	//			}else{
+	//			
+	//				ifNightMode_sw_running_FLAG = 0;
+	//			}
+				
+			}
+			else{
 			
-				ifNightMode_sw_running_FLAG = false;
+				ifNightMode_sw_running_FLAG = 0;
 			}
 		}
-
 
 		/*所有普通开关定时业务*/
 		for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){
@@ -309,16 +347,16 @@ timActingProcess_task(void *pvParameters){
 
 						if(((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) !=	\
 						   ((u16)timDatsTemp_CalibrateTab[loop].Hour * 60 + (u16)timDatsTemp_CalibrateTab[loop].Minute) && //定时时刻核对,不对则动作完成标志复位
-						   (timeUp_actionDone_flg)){
-
-							timeUp_actionDone_flg = false; //动作完成标志复位
+						   (timeUp_actionDone_flg & (1 << loop))){
+					   
+							timeUp_actionDone_flg &= ~(1 << loop); //动作完成标志复位
 						}
 						
 						if(((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) ==	\
 						   ((u16)timDatsTemp_CalibrateTab[loop].Hour * 60 + (u16)timDatsTemp_CalibrateTab[loop].Minute) && //定时时刻核对,正确时刻整分钟都是响应期
-						   (!timeUp_actionDone_flg)){  //同一分钟仅响应一次定时器动作响应
+						   !(timeUp_actionDone_flg & (1 << loop))){  //同一分钟仅响应一次定时器动作响应
 
-						   timeUp_actionDone_flg = true; //动作完成标志置位
+						    timeUp_actionDone_flg |= (1 << loop); //动作完成标志置位
 							   
 							//一次性定时判断
 							if(swTim_onShoot_FLAG & (1 << loop)){ //是否为一次性定时，是则清空当前段定时信息
@@ -361,10 +399,9 @@ timActingProcess_task(void *pvParameters){
 			}
 		}
 
-
 		vTaskDelay(1);
 	}
-
+	
 	vTaskDelete(NULL);
 }
 

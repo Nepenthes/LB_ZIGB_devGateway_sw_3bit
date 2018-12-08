@@ -15,7 +15,11 @@
 
 #define USRCLUSTERNUM_CTRLEACHOTHER		3 //互控端口数
 
+#define INTERNET_REMOTESERVER_PORTTAB_LEN	5 //internet服务器远端端口切换表长
+
 #define DEVZIGB_DEFAULT			0x33	//链表对应设备类型默认值
+
+#define DEVICE_VERSION_NUM		7		//设备版本号：L7 
 
 #define DEV_SWITCH_TYPE			0xA3	//开关设备类型默认值
 #define DEV_MAC_LEN				6
@@ -31,6 +35,16 @@
 //#define DATS_LOCATION_START		0x1F9	//16Mbit
 //#define DATS_LOCATION_START		0x0F9	//08Mbit
 
+#define FLASH_USROPREATION_ADDR_OFFSET_DEVLOCALINFO_RECORD		0 //记录单元扇区偏移地址：本地设备信息数据
+#define FLASH_USROPREATION_ADDR_OFFSET_SLAVEDEVLIST_RECORD		1 //记录单元扇区偏移地址：子设备列表信息数据
+#define FLASH_USROPREATION_ADDR_OFFSET_SPERELAYSTATUS_RECORD	2 //记录单元扇区偏移地址：特殊独立继电器实时状态信息数据
+
+#define RELAYSTATUS_REALYTIME_ENABLEIF		0 //是否将继电器状态进行独立记录 <在开关记忆使能情况下，开启此功能可以消除触摸时闪烁>
+
+#if(RELAYSTATUS_REALYTIME_ENABLEIF)
+ #define RECORDPERIOD_RELAYSTATUS_REALYTIME	200 //继电器实时状态记录 单循环 存储单元擦除周期
+#endif
+
 #define DEBUG_LOGLEN			128
 
 typedef struct{
@@ -42,7 +56,7 @@ typedef struct{
 typedef struct{
 
 	bool scenarioCtrlOprate_IF; //场景集群控制使能
-    scenarioOprateUnit_Attr scenarioOprate_Unit[100]; //集群节点MAC
+    scenarioOprateUnit_Attr scenarioOprate_Unit[zigB_ScenarioCtrlDataTransASY_QbuffLen]; //集群节点MAC
 	u8 devNode_num; //集群节点数目
 }stt_scenarioOprateDats;
 
@@ -73,6 +87,22 @@ typedef struct{
 	u8 	bkColor_swON; //色值索引，开
 	u8 	bkColor_swOFF; //色值索引，关
 }stt_usrDats_privateSave;
+
+#define ZIGBDEV_UNIT_MACLEN	5
+typedef struct{
+
+	u16 nwkAddr; //网络短地址
+	u8	macAddr[ZIGBDEV_UNIT_MACLEN]; //设备MAC地址
+	
+}stt_usrDats_zigbDevListInfo_unit;
+
+#define ZIGBDEV_LIST_LENGTH	100
+typedef struct{
+
+	stt_usrDats_zigbDevListInfo_unit listInfo[ZIGBDEV_LIST_LENGTH];
+	u8 zigbDevList_currentNum;
+	
+}stt_usrDats_zigbDevListInfo;
 
 typedef enum{
 
@@ -155,7 +185,8 @@ typedef struct agingDataSet_bitHold{ //使用指针强转时注意，agingCmd_sw
 	u8 agingCmd_devResetOpreat:1; //时效_开关恢复出厂操作 -bit7
 	
 	u8 agingCmd_horsingLight:1; //时效_跑马灯设置 -bit0
-	u8 statusRef_bitReserve:7; //时效_bit保留 -bit1...bit7
+	u8 agingCmd_switchBitBindSetOpreat:3; //时效_开关互控组号设置_针对三个开关位进行设置 -bit1...bit3
+	u8 statusRef_bitReserve:4; //时效_bit保留 -bit1...bit7
 	
 	u8 agingCmd_byteReserve[4];	//5字节占位保留
 	
@@ -190,12 +221,16 @@ typedef struct dataPonit{
 	u8									devData_nightMode[6]; //夜间模式数据, 6Bytes
 	u8									devData_bkLight[2]; //背光灯颜色, 2Bytes
 	u8									devData_devReset; //开关复位数据, 1Bytes
+	u8									devData_switchBitBind[3]; //开关位互控绑定数据, 3Bytes
 	
-}stt_devOpreatDataPonit; //standard_length = 46Bytes
+}stt_devOpreatDataPonit; //standard_length = 49Bytes
 /*=======================↑↑↑定时询访机制专用数据结构↑↑↑=============================*/
 
 extern const u8 debugLogOut_targetMAC[5];
 extern const u8 serverRemote_IP_Lanbon[4];
+extern const int remoteServerPort_switchTab[INTERNET_REMOTESERVER_PORTTAB_LEN];
+
+extern u8 zigbNwkReserveNodeNum_currentValue;
 
 extern u8 SWITCH_TYPE;
 extern u8 DEV_actReserve;
@@ -221,10 +256,14 @@ void devLockIF_Reales(void);
 u8 switchTypeReserve_GET(void);
 
 void printf_datsHtoA(const u8 *TipsHead, u8 *dats , u8 datsLen);
-stt_usrDats_privateSave *devParam_flashDataRead(void);	//谨记读取完毕后释放内存
 void devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSave_Temp);
+void devParam_SlaveZigbDevListInfoSave(stt_usrDats_zigbDevListInfo datsSave_Temp);
+stt_usrDats_privateSave *devParam_flashDataRead(void);	//谨记读取完毕后释放内存
+stt_usrDats_zigbDevListInfo *devParam_SlaveZigbDevListInfoRead(void);	//谨记读取完毕后释放内存
 void devData_recoverFactory(void);
 void devFactoryRecord_Opreat(void);
+void devParamDtaaSave_relayStatusRealTime(u8 currentRelayStatus);
+u8 devDataRecovery_relayStatus(void);
 
 #endif
 
