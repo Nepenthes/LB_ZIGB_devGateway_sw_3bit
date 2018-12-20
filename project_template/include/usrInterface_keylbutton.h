@@ -34,6 +34,8 @@ extern u16 	touchPadContinueCnt;
 extern bool usrKeyCount_EN;
 extern u16	usrKeyCount;
 
+extern u16  combinationFunFLG_3S5S_cancel_counter;
+
 void usrSmartconfig_stop(void);
 
 void usrInterface_ThreadStart(void);

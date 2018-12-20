@@ -36,6 +36,12 @@ u16	touchPadContinueCnt	= 0;  //Á¬°´¼ä¸ô¼ÆÊ±¼ÆÊýÖµ£¨´¥Ãþ°´¼ü£©
 bool usrKeyCount_EN	= false;  //°´ÏÂÊ±¼ä¼ÆÊ±¼ÆÊýÖµ£¨Çá´¥°´¼ü£©
 u16	 usrKeyCount	= 0;  //°´ÏÂÊ±¼ä¼ÆÊ±Ê¹ÄÜ£¨Çá´¥°´¼ü£©
 
+u8 touchKeepCnt_record	= 1;  //Á¬°´½øÐÐÊ±Á¬°´¼ÆÊý±äÁ¿£¬Á¬°´±Ø¶¨´Ó1¿ªÊ¼£¬·ñÔò²»½ÐÁ¬°´
+
+bool combinationFunTrigger_3S1L_standBy_FLG = false;  //Èý¶ÌÒ»³¤Ô¤´¥·¢±êÖ¾
+bool combinationFunTrigger_3S5S_standBy_FLG = false;  //Èý¶ÌÎå¶ÌÔ¤´¥·¢±êÖ¾
+u16  combinationFunFLG_3S5S_cancel_counter  = 0;	//Èý¶ÎÎå¶ÌÔ¤´¥·¢±êÖ¾_ÏÎ½ÓÊ±³¤È¡Ïû¼ÆÊý£¬ÏÎ½ÓÊ±¼ä¹ý³¤Ê±£¬½«Ô¤´¥·¢±êÖ¾È¡Ïû
+
 LOCAL bool relayStatusRecovery_doneIF = false; //¼ÌµçÆ÷ÈôÔÚ¼ÇÒäÊ¹ÄÜÇé¿öÏÂ£¬ÐèÒªÔÚ²¦ÂëÈ·ÈÏºó½øÐÐ»Ö¸´
 
 LOCAL xTaskHandle pxTaskHandle_threadUsrInterface;
@@ -122,7 +128,7 @@ usrSmartconfig_stop(void){
 		
 		smartconfig_stop();
 		somartConfig_complete(); //¶¨Ê±Æ÷»Ö¸´
-
+		
 		os_printf("smartconfig stop.\n");
 	}
 }
@@ -151,6 +157,92 @@ usrZigbNwkOpen_start(void){
 	os_printf("zigbNwk open start!!!.\n");
 }
 
+LOCAL void normalBussiness_shortTouchTrig(u8 statusPad){
+
+	bool tipsBeep_IF = false;
+
+	switch(statusPad){
+		
+		case 1:{
+			
+			if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1){
+			
+				swCommand_fromUsr.objRelay = 0;
+			}
+			else if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN){
+			
+				swCommand_fromUsr.objRelay = 4;
+			}
+			else{
+			
+				swCommand_fromUsr.objRelay = statusPad;
+			}
+			
+			if(DEV_actReserve & 0x01)tipsBeep_IF = 1;
+		
+		}break;
+		
+		case 2:{
+		
+			if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1){
+			
+				swCommand_fromUsr.objRelay = 1;
+			}
+			else if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2){
+			
+				swCommand_fromUsr.objRelay = 0;
+			}
+			else if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN){
+			
+				swCommand_fromUsr.objRelay = 2;
+			}
+			else{
+			
+				swCommand_fromUsr.objRelay = statusPad;
+			}
+			
+			if(DEV_actReserve & 0x02)tipsBeep_IF = 1;
+		
+		}break;
+		
+		case 4:{
+	
+			if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2){
+			
+				swCommand_fromUsr.objRelay = 2;
+			}
+			else if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN){
+			
+				swCommand_fromUsr.objRelay = 1;
+			}
+			else{
+			
+				swCommand_fromUsr.objRelay = statusPad;
+			}
+			
+			if(DEV_actReserve & 0x04)tipsBeep_IF = 1;
+			
+		}break;
+			
+		default:{}break;
+	}
+	
+	if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3){
+	
+		swCommand_fromUsr.actMethod = relay_flip;
+		EACHCTRL_realesFLG = swCommand_fromUsr.objRelay; //»¥¿Ø
+		
+	}else{
+	
+		swCommand_fromUsr.actMethod = relay_OnOff;
+	}
+	
+	if(swCommand_fromUsr.objRelay)devActionPush_IF.push_IF = 1; //ÍÆËÍ
+	devStatus_pushIF = true; //¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
+	if(tipsBeep_IF)beeps_usrActive(3, 25, 1); //tips
+
+}
+
 LOCAL void ICACHE_FLASH_ATTR
 touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼ü´¥·¢
 
@@ -158,110 +250,56 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 	
 		case press_Short:{
 
-			bool tipsBeep_IF = false;
-
 			os_printf("touchShort get:%02X.\n", statusPad);
 		
-			switch(statusPad){
-				
-				case 1:{
-					
-					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 0;
-					else swCommand_fromUsr.objRelay = statusPad;
-
-					if(DEV_actReserve & 0x01)tipsBeep_IF = true;
-				
-				}break;
-				
-				case 2:{
-				
-					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 1;
-					else if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 0;
-					else swCommand_fromUsr.objRelay = statusPad;
-
-					if(DEV_actReserve & 0x02)tipsBeep_IF = true;
-				
-				}break;
-				
-				case 4:{
-				
-					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 2;
-					else swCommand_fromUsr.objRelay = statusPad;
-
-					if(DEV_actReserve & 0x04)tipsBeep_IF = true;
-					
-				}break;
-					
-				default:{}break;
-			}
-
-			swCommand_fromUsr.actMethod = relay_flip;
-			EACHCTRL_realesFLG = statusPad; //·ÇÁ¬°´¶Ì°´´¥·¢»¥¿Ø
-			devStatus_pushIF = true; //¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
-			if(tipsBeep_IF)beeps_usrActive(3, 25, 1); //´¥Ãþ¿ÉÓÃ²Åtips
+			normalBussiness_shortTouchTrig(statusPad); //ÆÕÍ¨¶Ì°´ÒµÎñ´¥·¢
 			
 		}break;
 		
 		case press_ShortCnt:{
 
-			bool tipsBeep_IF = false;
-
 			os_printf("touchCnt get:%02X.\n", statusPad);
+
+			touchKeepCnt_record ++; //Á¬°´½øÐÐÊ±¼ÆÊý±äÁ¿¸üÐÂ
+		
+			if(touchKeepCnt_record == 3){
 			
-			switch(statusPad){
+				combinationFunTrigger_3S1L_standBy_FLG = true; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾ÖÃÎ»<3¶Ì1³¤>
 				
-				case 1:{
-					
-					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 0;
-					else swCommand_fromUsr.objRelay = statusPad;
+			}else{
 			
-					if(DEV_actReserve & 0x01)tipsBeep_IF = true;
-				
-				}break;
-				
-				case 2:{
-				
-					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1)swCommand_fromUsr.objRelay = 1;
-					else if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 0;
-					else swCommand_fromUsr.objRelay = statusPad;
-			
-					if(DEV_actReserve & 0x02)tipsBeep_IF = true;
-				
-				}break;
-				
-				case 4:{
-				
-					if(SWITCH_TYPE == SWITCH_TYPE_SWBIT2)swCommand_fromUsr.objRelay = 2;
-					else swCommand_fromUsr.objRelay = statusPad;
-			
-					if(DEV_actReserve & 0x04)tipsBeep_IF = true;
-					
-				}break;
-					
-				default:{}break;
-			}
-			
-			swCommand_fromUsr.actMethod = relay_flip;
-			EACHCTRL_realesFLG = statusPad; //·ÇÁ¬°´¶Ì°´´¥·¢»¥¿Ø
-			devStatus_pushIF = true; //¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
-			if(tipsBeep_IF)beeps_usrActive(3, 25, 1); //´¥Ãþ¿ÉÓÃ²Åtips
+				combinationFunTrigger_3S1L_standBy_FLG = false;
+			} 
+
+			normalBussiness_shortTouchTrig(statusPad); //ÆÕÍ¨¶Ì°´ÒµÎñ´¥·¢
 
 		}break;
 		
 		case press_LongA:{
 
-			os_printf("touchLongA get:%02X.\n", statusPad);
-		
-			switch(statusPad){
-			
-				case 1:
-				case 2:
-				case 4:{
-					
+			if(combinationFunTrigger_3S1L_standBy_FLG){ //ÌØÊâ×éºÏ°´¼ü¶¯×÷ÒµÎñ´¥·¢<3¶Ì1³¤>
 
-				}break;
-					
-				default:{}break;
+				combinationFunTrigger_3S1L_standBy_FLG = false; //Ô¤´¥·¢±êÖ¾ÇåÁã
+
+				os_printf("combination fun<3S1L> trig!\n");
+
+				usrFunCB_pressLongA();
+
+			}else{
+
+				os_printf("touchLongA get:%02X.\n", statusPad);
+			
+				switch(statusPad){
+				
+					case 1:
+					case 2:
+					case 4:{
+						
+
+					}break;
+						
+					default:{}break;
+				}				
 			}
 			
 		}break;
@@ -287,6 +325,17 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 			
 		default:{}break;
 	}
+
+	{ //°´¼üÌØÊâ×éºÏ¶¯×÷Ïà¹Ø±êÖ¾¼°±äÁ¿ÇåÁã
+	
+		if(statusCfm != press_ShortCnt){
+
+			touchKeepCnt_record = 1; //Á¬°´½øÐÐÊ±¼ÆÊý±äÁ¿¸´Ô­
+			combinationFunTrigger_3S1L_standBy_FLG = false; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì1³¤>
+			
+			if(statusCfm != press_Short)combinationFunTrigger_3S5S_standBy_FLG = false; //·Ç¶Ì°´¼°·ÇÁ¬Ðø¶Ì°´£¬Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì5¶Ì>
+		}
+	}
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -297,50 +346,67 @@ touchPad_functionTrigContinue(u8 statusPad, u8 loopCount){	//ÆÕÍ¨´¥Ãþ°´¼üÁ¬°´´¥·
 
 	os_printf("touchCnt over:%02X, %02dtime.\n", statusPad, loopCount);
 
-	switch(statusPad){
-	
-		case 1:{
-		
-			switch(loopCount){
-			
-				case 3:{
-		
-				}break;
-				
-				case 4:{
+	switch(loopCount){
 
-					usrZigbNwkOpen_start();
+		case 2:{
+
+			switch(statusPad){
+			
+				case 1:{
 				
+					
+				}break;
+					
+				case 2:{
+				
+					
+				}break;
+					
+				case 4:{
+			
+					
 				}break;
 					
 				default:{}break;
 			}
 			
 		}break;
-			
-		case 2:{
+
+		case 3:{
+
+			combinationFunTrigger_3S5S_standBy_FLG = true; //ÌØÊâ×éºÏ¶¯×÷°´¼üÔ¤´¥·¢±êÖ¾ÖÃÎ»<3¶Ì5¶Ì>
+			combinationFunFLG_3S5S_cancel_counter = 3000;  //ÌØÊâ×éºÏ¶¯×÷°´¼üÔ¤´¥ÏÎ½ÓÊ±¼ä¼ÆÊ±¿ªÊ¼<3¶Ì5¶Ì>
 		
-			switch(loopCount){
-			
-				case 3:{}break;
-					
-				default:{}break;
-			}
-			
 		}break;
+
+		case 5:{
+
+			if(combinationFunTrigger_3S5S_standBy_FLG){ //ÌØÊâ×éºÏ°´¼ü¶¯×÷ÒµÎñ´¥·¢<3¶Ì5¶Ì>
 			
-		case 4:{
-		
-			switch(loopCount){
-			
-				case 3:{}break;
-					
-				default:{}break;
+				combinationFunTrigger_3S5S_standBy_FLG = false;
+
+				os_printf("combination fun<3S5S> trig!\n");
+				
+				usrZigbNwkOpen_start();
 			}
-			
+
 		}break;
 		
+		case 6:{}break;
+
+		case 10:{}break;
+	
 		default:{}break;
+	}
+
+	{ //°´¼üÌØÊâ×éºÏ¶¯×÷Ïà¹Ø±êÖ¾¼°±äÁ¿ÇåÁã
+	
+		touchKeepCnt_record = 1; //Á¬°´½øÐÐÊ±¼ÆÊý±äÁ¿¸´Î»
+		combinationFunTrigger_3S1L_standBy_FLG = false; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì1³¤>
+		if(loopCount != 3){ //
+		
+			combinationFunTrigger_3S5S_standBy_FLG = false; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì5³¤>
+		}
 	}
 }
 
@@ -392,8 +458,8 @@ touchPadScan_oneShoot(void){
 LOCAL void ICACHE_FLASH_ATTR
 DcodeScan(void){
 
-	static u8 	val_Dcode_Local 	= 0,
-				comfirm_Cnt			= 0;
+	static u8 	val_Dcode_Local 	= 0x00, //Òç³ö¸³Öµ ÌáÇ°´¥·¢Ê×´Î¼ì²â
+				comfirm_Cnt			= 200;  //Òç³ö¸³Öµ ÌáÇ°´¥·¢Ê×´Î¼ì²â
 	const  u8 	comfirm_Period		= 200;	//²¦ÂëÖµÏû¶¶È·ÈÏÖÜÆÚ-È¡¾öÓÚµ±Ç°Ïß³Ìµ÷¶ÈÖÜÆÚ
 		
 		   u8 	val_Dcode_differ	= 0;
@@ -424,6 +490,7 @@ DcodeScan(void){
 		os_printf("Dcode chg: %02X.\n", val_Dcode_Local);
 
 		beeps_usrActive(3, 20, 2);
+		tips_statusChangeToNormal();
 
 		if(val_Dcode_differ & Dcode_FLG_ifAP){
 		
@@ -461,7 +528,7 @@ DcodeScan(void){
 			
 				case 0:{
 				
-					SWITCH_TYPE = SWITCH_TYPE_SWBIT3;	
+					SWITCH_TYPE = SWITCH_TYPE_CURTAIN;	
 					
 				}break;
 					
@@ -565,6 +632,8 @@ touchPad_Scan(void){
 		   u8 	pressContinueCfm = 0;
 
 	u16 conterTemp = 0; //
+
+	if(!combinationFunFLG_3S5S_cancel_counter)combinationFunTrigger_3S5S_standBy_FLG = false; //<3¶Ì5¶Ì>ÌØÊâ×éºÏ°´¼üÏÎ½ÓÊ±¼ä³¬Ê±¼ì²âÒµÎñ£¬³¬Ê±Ôò½«¶ÔÓ¦Ô¤´¥·¢±êÖ¾¸´Î»
 
 	if(touchPadScan_oneShoot()){
 		

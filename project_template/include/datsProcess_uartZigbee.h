@@ -108,13 +108,32 @@ typedef struct{
 
 typedef struct{
 
+	u8 prot_Ep; //终端点编号
+		
+	u8 ctrlEachOther_dat; //互控值
+	u8 ctrlEachOther_loop; //当前值互控剩余发送次数
+}sttUartRcv_ctrlEachDat;
+
+typedef struct{
+
 	u16 respNwkAddr;
 }sttUartRcv_scenarioCtrlResp;
+
+typedef struct{
+
+	u8  dats[10];
+	u8  datsLen;
+	
+	u8 	portPoint;
+	u16	nwkAddr;
+	
+	u8 constant_Loop; //重复次数
+}datsAttr_dtCtrlEach;
 
 #define dataRemote_RESPLEN 8
 typedef struct{
 
-	u8 	dataReq[96];
+	u8 	dataReq[128 + 25];
 	u8 	dataReq_Len;
 	u8 	dataResp[dataRemote_RESPLEN];
 	u8 	dataResp_Len;

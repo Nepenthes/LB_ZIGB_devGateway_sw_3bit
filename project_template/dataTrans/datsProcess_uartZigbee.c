@@ -28,14 +28,18 @@ xQueueHandle xMsgQ_Zigb2Socket; //zigbee到socket数据中转消息队列
 xQueueHandle xMsgQ_uartToutDats_dataSysRespond; //串口数据接收超时断帧数据队列-协议栈或系统回复数据
 xQueueHandle xMsgQ_uartToutDats_dataRemoteComing; //串口数据接收超时断帧数据队列-远端数据
 xQueueHandle xMsgQ_uartToutDats_rmDataReqResp; //串口数据接收超时断帧数据队列-远端数据请求后的应答
+xQueueHandle xMsgQ_uartToutDats_datsComingCtrlEach;  //串口数据接收超时断帧数据队列-互控数据接收
 xQueueHandle xMsgQ_uartToutDats_scenarioCtrlResp;  //串口数据接收超时断帧数据队列-场景控制远端应答
 xQueueHandle xMsgQ_timeStampGet; //网络时间戳获取消息队列
 xQueueHandle xMsgQ_zigbFunRemind; //zigb功能触发消息队列
 
 #define FifoFullIntr_lengthLimit	120 //fifo溢出值定义
-#define TimeOutIntr_timeLimit	100 //超时接收时间定义
+#define TimeOutIntr_timeLimit		100 //超时接收时间定义
 #define fifoLength  1024 //串口缓存长度
 
+datsAttr_dtCtrlEach datsSend_requestEx[3] = {0}; //持续型远端请求数据，无需应答，互控专用
+u8 localDataRecord_eaCtrl[USRCLUSTERNUM_CTRLEACHOTHER] = {0}; //本地静态实际互控数据记录
+u16 dtReqEx_counter = 0; //持续型远端请求数据发送间隔计时变量，互控专用
 stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen] = {0}; //常规远端数据请求发送队列
 stt_dataScenarioReq localZigbASYDT_bufQueueScenarioReq[zigB_ScenarioCtrlDataTransASY_QbuffLen] = {0}; //场景控制远端数据请求发送队列
 u8 localZigbASYDT_scenarioCtrlReserveAllnum = 0; //当前剩余有效的场景操作单位数目
@@ -67,12 +71,14 @@ appMsgQueueCreat_uartToutDatsRcv(void){
 
 	xMsgQ_uartToutDats_dataSysRespond = xQueueCreate(30, sizeof(sttUartRcv_sysDat));
 	if(0 == xMsgQ_uartToutDats_dataSysRespond)return FAIL;
-	else xMsgQ_uartToutDats_dataRemoteComing = xQueueCreate(50, sizeof(sttUartRcv_rmoteDatComming));
+	else xMsgQ_uartToutDats_dataRemoteComing = xQueueCreate(40, sizeof(sttUartRcv_rmoteDatComming));
 	if(0 == xMsgQ_uartToutDats_dataRemoteComing)return FAIL;
 	else xMsgQ_uartToutDats_rmDataReqResp = xQueueCreate(30, sizeof(sttUartRcv_rmDatsReqResp));
 	if(0 == xMsgQ_uartToutDats_rmDataReqResp)return FAIL;
 	else xMsgQ_uartToutDats_scenarioCtrlResp = xQueueCreate(50, sizeof(sttUartRcv_scenarioCtrlResp));
 	if(0 == xMsgQ_uartToutDats_scenarioCtrlResp)return FAIL;
+	else xMsgQ_uartToutDats_datsComingCtrlEach = xQueueCreate(30, sizeof(sttUartRcv_ctrlEachDat));
+	if(0 == xMsgQ_uartToutDats_datsComingCtrlEach)return FAIL;
 	else return OK;
 }
 
@@ -492,6 +498,7 @@ myUart0datsTrans_intr_funCB(void *para){
 					sttUartRcv_rmoteDatComming mptr_rmoteDatComming;
 					sttUartRcv_sysDat mptr_sysDat;
 					sttUartRcv_rmDatsReqResp mptr_rmDatsReqResp;
+					sttUartRcv_ctrlEachDat mptr_ctrlEachDat;
 					sttUartRcv_scenarioCtrlResp mptr_scenarioCtrlResp;
 
 					frameTotal_Len = uart0_rxTemp[frameHead_insert + 1] + 5; //单帧长更新（拆包）
@@ -508,6 +515,14 @@ myUart0datsTrans_intr_funCB(void *para){
 							if(uart0_rxTemp[frameHead_insert + 21] == ZIGB_FRAMEHEAD_CTRLLOCAL && uart0_rxTemp[frameHead_insert + 24] == FRAME_MtoSCMD_cmdConfigSearch){ //搜索码回码优先处理
 
 								xQueueSendToFront(xMsgQ_uartToutDats_dataRemoteComing, (void *)&mptr_rmoteDatComming, ( portTickType ) 0);
+								
+							}else
+							if((uart0_rxTemp[frameHead_insert + 10] > CTRLEATHER_PORT_NUMSTART) && (frameTotal_Len == 27)){ //大于16为互控端口，总数据长度为27
+
+								mptr_ctrlEachDat.prot_Ep = uart0_rxTemp[frameHead_insert + 10]; //终端点编号
+								mptr_ctrlEachDat.ctrlEachOther_dat = uart0_rxTemp[frameHead_insert + 21]; //互控数据
+								mptr_ctrlEachDat.ctrlEachOther_loop = uart0_rxTemp[frameHead_insert + 22]; //互控剩余发送次数
+								xQueueSend(xMsgQ_uartToutDats_datsComingCtrlEach, (void *)&mptr_ctrlEachDat, ( portTickType ) 0);
 								
 							}else
 							if(uart0_rxTemp[frameHead_insert + 21] == CTRLSECENARIO_RESPCMD_SPECIAL && frameTotal_Len == 26){ //场景控制远端响应回复
@@ -583,7 +598,7 @@ myUart0datsTrans_intr_funCB(void *para){
 								}	
 							}
 
-							os_printf(">>>>>>>>>errFrame tail:%02X-%02X-%02X, legal_impStart:%02X.\n",	uart0_rxTemp[uartBuff_rcvLength - 3],
+							os_printf(">>>>>>>>>errFrame tail:%02X-%02X-%02X, legal_impStart:%04X.\n",	uart0_rxTemp[uartBuff_rcvLength - 3],
 																										uart0_rxTemp[uartBuff_rcvLength - 2],
 																										uart0_rxTemp[uartBuff_rcvLength - 1],
 																										uartBuff_baseInsertStart);
@@ -1125,18 +1140,20 @@ ZigB_getIEEEAddr(void){
 								 6,
 								 (u8 *)cmdResp_zigbPanIDGet,
 								 local_datsParam,
-								 30,
+								 50,
 								 datsReq_method);
 
 	if(true == resultREQ){
 
 		u16 loop = 0;
-
+		
+#if(DEV_MAC_SOURCE_DEF == DEV_MAC_SOURCE_ZIGBEE)
 		for(loop = 0; loop < DEV_MAC_LEN; loop ++){
 
 			MACSTA_ID[DEV_MAC_LEN - loop - 1] = local_datsParam->frameResp[5 + loop];
 		}
-	
+#else
+#endif	
 //		printf_datsHtoA("[Tips_uartZigb]: resultDats:", local_datsParam->frameResp, local_datsParam->frameRespLen);
 	}
 
@@ -1144,7 +1161,7 @@ ZigB_getIEEEAddr(void){
 	return resultREQ;
 }
 
-/*zigbee IEEE地址获取*/
+/*zigbee 随机数获取*/
 LOCAL bool ICACHE_FLASH_ATTR
 ZigB_getRandom(void){
 
@@ -1434,8 +1451,8 @@ ZigB_datsRemoteRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 							datsRX->datsSTT.stt_MSG.ClusterID	= (((u16)*(ptr + 4) & 0x00FF) << 0) + (((u16)*(ptr + 5) & 0x00FF) << 8);
 							datsRX->datsSTT.stt_MSG.LQI 		= *(ptr + 11);
 							datsRX->datsSTT.stt_MSG.datsLen 	= *(ptr + 18);
-							memset(datsRX->datsSTT.stt_MSG.dats,0,datsRX->datsSTT.stt_MSG.datsLen * sizeof(u8));
-							memcpy(datsRX->datsSTT.stt_MSG.dats,(ptr + 19),*(ptr + 18));
+							memset(datsRX->datsSTT.stt_MSG.dats, 0, datsRX->datsSTT.stt_MSG.datsLen * sizeof(u8));
+							memcpy(datsRX->datsSTT.stt_MSG.dats, (ptr + 19), *(ptr + 18));
 							
 							datsRX->datsType = zigbTP_MSGCOMMING;
 							return true;
@@ -1540,10 +1557,10 @@ ZigB_PANIDReales(bool inspection_IF){ //是否自检
 
 /*zigbee数据发送*/
 LOCAL void ICACHE_FLASH_ATTR
-ZigB_remoteDatsSend(u16 DstAddr, //地址
-						  u8 dats[], //数据
-                          u8 datsLen, //数据长度
-                          u8 port){ //端口
+ZigB_remoteDatsSend_straightforward(u16 DstAddr, //地址
+											  u8 port, //端口
+											  u8 dats[], //数据
+					                          u8 datsLen){ //数据长度
 
 	const u8 zigbProtocolCMD_dataSend[2] = {0x24,0x01};
 	const u8 TransID = 13;
@@ -1587,9 +1604,10 @@ LOCAL bool ZigB_datsTX_ASY( uint16 	DstAddr,
 	const u8 cmd_dataReq[2] = {0x24, 0x01};
 	const u8 cmd_dataResp[2] = {0x44, 0x80};
 
-#define zigbTX_datsTransLen_ASR 96
+#define zigbTX_datsTransLen_ASR (128 + 25)
 	uint8 buf_datsTX[zigbTX_datsTransLen_ASR] = {0};
-	uint8 buf_datsRX[zigbTX_datsTransLen_ASR] = {0};
+#define zigbRX_datsTransLen_ASR (8 + 25)
+	uint8 buf_datsRX[zigbRX_datsTransLen_ASR] = {0};
 
 	u8 loop = 0;
 
@@ -1628,11 +1646,6 @@ LOCAL bool ZigB_datsTX_ASY( uint16 	DstAddr,
 
 				memset(&bufQueue[loop - 1], 0, sizeof(stt_dataRemoteReq));
 			}
-
-//			if(DstAddr == 0xDB04){
-
-//				os_printf(">>>txPagLen:%d, dataLen:%d.\n", bufQueue[loop].dataReq_Len, datsLen);
-//			}
 
 			return true;
 		}
@@ -1707,7 +1720,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 #define zigB_mThread_datsMSG_Len 	100	//打印数据缓存
 	char dats_MSG[zigB_mThread_datsMSG_Len];
 
-#define zigB_datsTX_bufferLen 		96	//zigB数据发送缓存
+#define zigB_datsTX_bufferLen 		128	//zigB数据发送缓存
 	u8 	datsKernel_TXbuffer[zigB_datsTX_bufferLen];
 
 	u8 	local_insertRecord_datsReqNormal = 0; //静态值：本地普通非阻塞远端数据请求队列索引
@@ -1716,8 +1729,8 @@ zigbeeDataTransProcess_task(void *pvParameters){
 	u16 local_scenarioCtrl_counterRoundPause = 0; //数据发送轮次间距暂歇时间计数值
 	u8 	local_ctrlRecord_reserveLoopInsert = zigB_ScenarioCtrlDataTransASY_opreatOnceNum; //静态值：场景可用操作单元数目(分批次专用)
 
-	stt_threadDatsPass mptr_Z2S;
-	stt_threadDatsPass rptr_S2Z;	//通信线程消息队列，socket通信主线程到zigbee通信主线程
+	stt_threadDatsPass mptr_Z2S;	//通信线程发送消息队列缓存，zigbee通信主线程到socket通信主线程
+	stt_threadDatsPass rptr_S2Z;	//通信线程接收消息队列缓存，socket通信主线程到zigbee通信主线程
 	u32_t rptr_timeStamp;
 	enum_zigbFunMsg rptr_zigbFunRm;
 	portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
@@ -1741,6 +1754,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 	while(!ZigB_resetInit());
 
 	os_printf("ZIGB sysRandom get result is: %d.\n", ZigB_getRandom()); //PANID预取随机数更新
+	vTaskDelay(10);
 	os_printf("IEEE to MAC result is: %d.\n", ZigB_getIEEEAddr()); //MAC更新
 	vTaskDelay(20);
 	while(!ZigB_PANIDReales(1)); //panid自检/更新
@@ -1781,7 +1795,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 						
 						u16 p_nwkRemove = pHead_listDevInfo->nwkAddr;
 						
-			//			while(false == zigbDev_eptRemove_BYnwk((nwkStateAttr_Zigb *)pHead_listDevInfo,p_nwkRemove));
+//						while(false == zigbDev_eptRemove_BYnwk((nwkStateAttr_Zigb *)pHead_listDevInfo,p_nwkRemove));
 			
 						zigbNwkReserveNodeNum_currentValue --; //节点总数更新
 			
@@ -1811,6 +1825,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 						zigbNetwork_OpenIF(1, ZIGBNWKOPENTIME_DEFAULT); //自身响应网络开放请求
 
+						/*zigbee网络开放应用层二次通知*///zigbee开放网络指令本身就是广播性质，可以不进行应用层二次广播补充
 //						datsTemp_zigbSysCtrl.command = ZIGB_SYSCMD_NWKOPEN;
 //						datsTemp_zigbSysCtrl.dats[0] = ZIGBNWKOPENTIME_DEFAULT;
 //						datsTemp_zigbSysCtrl.datsLen = 1;
@@ -1994,16 +2009,27 @@ zigbeeDataTransProcess_task(void *pvParameters){
 							
 							if((CTRLEATHER_PORT[loop] > CTRLEATHER_PORT_NUMSTART) && CTRLEATHER_PORT[loop] < CTRLEATHER_PORT_NUMTAIL){ //判定是否为有效互控端口
 
+								localDataRecord_eaCtrl[loop] = datsTemp_zigbCtrlEachother[0]; //本地记录更新
 								(datsTemp_zigbCtrlEachother[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
 
-								TXCMP_FLG = ZigB_datsTX_ASY(0xFFFF, 
-															CTRLEATHER_PORT[loop],
-															CTRLEATHER_PORT[loop],
-															ZIGB_CLUSTER_DEFAULT_CULSTERID,
-															(u8 *)datsTemp_zigbCtrlEachother,
-															datsTempLen_zigbCtrlEachother,
-															localZigbASYDT_bufQueueRemoteReq,
-															zigB_remoteDataTransASY_QbuffLen);
+								/*无视回码，持续性发送*///非常规
+								datsSend_requestEx[loop].nwkAddr = 0xffff; //间接组播（指定端口广播）
+								datsSend_requestEx[loop].portPoint = CTRLEATHER_PORT[loop]; //对应绑定端口加载
+								memset(datsSend_requestEx[loop].dats, 0, 10 * sizeof(u8));
+								
+								datsSend_requestEx[loop].dats[0] = datsTemp_zigbCtrlEachother[0];
+								datsSend_requestEx[loop].dats[1] = 0; //下标2为剩余发送次数，发送时实时更新，初值赋0
+								datsSend_requestEx[loop].datsLen = 2;
+								datsSend_requestEx[loop].constant_Loop = 30; //无视回码发30次
+
+//								TXCMP_FLG = ZigB_datsTX_ASY(0xFFFF, 
+//															CTRLEATHER_PORT[loop],
+//															CTRLEATHER_PORT[loop],
+//															ZIGB_CLUSTER_DEFAULT_CULSTERID,
+//															(u8 *)datsTemp_zigbCtrlEachother,
+//															datsTempLen_zigbCtrlEachother,
+//															localZigbASYDT_bufQueueRemoteReq,
+//															zigB_remoteDataTransASY_QbuffLen);
 							}
 						}
 					}
@@ -2016,9 +2042,9 @@ zigbeeDataTransProcess_task(void *pvParameters){
 	
 				if(rptr_timeStamp)zigB_sysTimeSet(rptr_timeStamp - ZIGB_UTCTIME_START); //zigbee UTC 负补偿
 	
-	//			if(rptr_timeStamp == zigB_sysTimeGet())os_printf("time right.\n");
+//				if(rptr_timeStamp == zigB_sysTimeGet())os_printf("time right.\n");
 	
-	//			os_printf("[Tips_uartZigb]: zigbee msgQ is: 0x%08X.\n", rptr_timeStamp);
+//				os_printf("[Tips_uartZigb]: zigbee msgQ is: 0x%08X.\n", rptr_timeStamp);
 			}
 	
 			/*>>>>>>sockets数据处理<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
@@ -2044,7 +2070,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 								else{ //localPeriod_nwkTrig次搜索触发一次开放网络，取决于搜索码发送周期
 
 									localCount_searchREQ = 0;
-									usrZigbNwkOpen_start(); //配置搜索时通知网内所有节点开放网络加入窗口
+									if(!deviceLock_flag)usrZigbNwkOpen_start(); //配置搜索时通知网内所有节点开放网络加入窗口,网关设备上锁情况下则不进行网络开放
 								}
 						   	}
 
@@ -2185,6 +2211,26 @@ zigbeeDataTransProcess_task(void *pvParameters){
 											  devMAC_Temp[3],
 											  devMAC_Temp[4],
 											  local_datsRX->datsSTT.stt_MSG.Addr_from);
+
+									if(local_datsRX->datsSTT.stt_MSG.dats[9] == (0x38 + 7)){ //子设备 插座类型 数据调试输出
+
+										u8 debugData_Temp[4] = {0};
+										char debug_str[12] = {0};
+
+										/*8266 sdk库printf()没有 %f浮点数 打印功能，所以需要自定的ftoa转换*/
+										memcpy(debugData_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[72]), 4); //power频率
+										ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
+										os_printf("[dev_socket debugDats]: current powerFreq:%sHz,", debug_str);
+										
+										memcpy(debugData_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[64]), 4); //power值
+										ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
+										os_printf("valPower:%sW,", debug_str);
+										
+										memcpy(&debugData_Temp[1], &(local_datsRX->datsSTT.stt_MSG.dats[68]), 3); //电量值
+										debugData_Temp[0] = 0;
+										ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
+										os_printf("valEleConsum:%skWh.\n", debug_str);
+									}
 								}
 
 //								/*数据包log输出*/
@@ -2216,6 +2262,12 @@ zigbeeDataTransProcess_task(void *pvParameters){
 									}
 									
 								}else{
+
+									if(memcmp(devMAC_Temp, ZigbDevNew_temp->macAddr, DEVMAC_LEN)){ //若网络地址相同的情况下，MAC地址不一致，则以最新的MAC地址为准，并进行更新
+
+										os_printf(">>>detect differ MAC, node[%04X]Info get reales.\n", ZigbDevNew_temp->nwkAddr);
+										memcpy(ZigbDevNew_temp->macAddr, devMAC_Temp, DEVMAC_LEN); //以最新的MAC地址进行对应链表节点更新
+									}
 								
 									ZigbDevNew_temp->onlineDectect_LCount = zigDev_lifeCycle; //更新节点设备在列表中的生命周期
 									ZigbDevNew_temp = NULL;
@@ -2318,38 +2370,41 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 							default:{//其余端口
 
-								u8 srcPoint = local_datsRX->datsSTT.stt_MSG.srcEP;
+//								u8 srcPoint = local_datsRX->datsSTT.stt_MSG.srcEP;
 
-								if(srcPoint > CTRLEATHER_PORT_NUMSTART && srcPoint < CTRLEATHER_PORT_NUMTAIL){ //余下端口：0x11<17> - 0xfe<254>用作互控
+//								if(srcPoint > CTRLEATHER_PORT_NUMSTART && srcPoint < CTRLEATHER_PORT_NUMTAIL){ //余下端口：0x11<17> - 0xfe<254>用作互控
 
-									u8 statusRelay_temp = status_actuatorRelay; //当前开关状态缓存
+//									u8 statusRelay_temp = status_actuatorRelay; //当前开关状态缓存
 
-									if((srcPoint == CTRLEATHER_PORT[0]) && (0 != CTRLEATHER_PORT[0])){ //开关位 1 互控绑定端口判定
-									
-										swCommand_fromUsr.actMethod = relay_OnOff;
-										statusRelay_temp &= ~(1 << 0); //动作缓存位清零
-										swCommand_fromUsr.objRelay = statusRelay_temp | local_datsRX->datsSTT.stt_MSG.dats[0] << 0; //bit0 开关动作位 动作响应
-										(local_datsRX->datsSTT.stt_MSG.dats[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
-									}
-									else
-									if((srcPoint == CTRLEATHER_PORT[1]) && (0 != CTRLEATHER_PORT[1])){ //开关位 2 互控绑定端口判定
-									
-										swCommand_fromUsr.actMethod = relay_OnOff;
-										statusRelay_temp &= ~(1 << 1); //动作缓存位清零
-										swCommand_fromUsr.objRelay = statusRelay_temp | local_datsRX->datsSTT.stt_MSG.dats[0] << 1; //bit1 开关动作位 动作响应
-										(local_datsRX->datsSTT.stt_MSG.dats[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[1]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[1]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
-									}
-									else
-									if((srcPoint == CTRLEATHER_PORT[2]) && (0 != CTRLEATHER_PORT[2])){ //开关位 3 互控绑定端口判定
-									
-										swCommand_fromUsr.actMethod = relay_OnOff;
-										statusRelay_temp &= ~(1 << 2); //动作缓存位清零
-										swCommand_fromUsr.objRelay = statusRelay_temp | local_datsRX->datsSTT.stt_MSG.dats[0] << 2; //bit2 开关动作位 动作响应
-										(local_datsRX->datsSTT.stt_MSG.dats[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[2]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[2]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
-									}
-								}
+//									if((srcPoint == CTRLEATHER_PORT[0]) && (0 != CTRLEATHER_PORT[0])){ //开关位 1 互控绑定端口判定
+//									
+//										swCommand_fromUsr.actMethod = relay_OnOff;
+//										statusRelay_temp &= ~(1 << 0); //动作缓存位清零
+//										swCommand_fromUsr.objRelay = statusRelay_temp | local_datsRX->datsSTT.stt_MSG.dats[0] << 0; //bit0 开关动作位 动作响应
+//										localDataRecord_eaCtrl[0] = local_datsRX->datsSTT.stt_MSG.dats[0]; //本地记录
+//										(local_datsRX->datsSTT.stt_MSG.dats[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+//									}
+//									else
+//									if((srcPoint == CTRLEATHER_PORT[1]) && (0 != CTRLEATHER_PORT[1])){ //开关位 2 互控绑定端口判定
+//									
+//										swCommand_fromUsr.actMethod = relay_OnOff;
+//										statusRelay_temp &= ~(1 << 1); //动作缓存位清零
+//										swCommand_fromUsr.objRelay = statusRelay_temp | local_datsRX->datsSTT.stt_MSG.dats[0] << 1; //bit1 开关动作位 动作响应
+//										localDataRecord_eaCtrl[1] = local_datsRX->datsSTT.stt_MSG.dats[1]; //本地记录
+//										(local_datsRX->datsSTT.stt_MSG.dats[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[1]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[1]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+//									}
+//									else
+//									if((srcPoint == CTRLEATHER_PORT[2]) && (0 != CTRLEATHER_PORT[2])){ //开关位 3 互控绑定端口判定
+//									
+//										swCommand_fromUsr.actMethod = relay_OnOff;
+//										statusRelay_temp &= ~(1 << 2); //动作缓存位清零
+//										swCommand_fromUsr.objRelay = statusRelay_temp | local_datsRX->datsSTT.stt_MSG.dats[0] << 2; //bit2 开关动作位 动作响应
+//										localDataRecord_eaCtrl[2] = local_datsRX->datsSTT.stt_MSG.dats[1]; //本地记录
+//										(local_datsRX->datsSTT.stt_MSG.dats[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[2]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[2]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+//									}
+//								}
 
-								devStatus_pushIF = true; //开关状态数据推送
+//								devStatus_pushIF = true; //开关状态数据推送
 							
 							}break;
 						}
@@ -2377,8 +2432,44 @@ zigbeeDataTransProcess_task(void *pvParameters){
 			ZigB_nwkReconnect();
 		}
 
+		/*>>>>>>zigb非阻塞持续型远端数据传输<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
+		{ //互控业务
+			
+			const u16 DTREQ_EXATTR_ONCEPERIOD = 251; //持续传输 数据包间隔
+			u16 constandLoop_reserve = datsSend_requestEx[0].constant_Loop + datsSend_requestEx[1].constant_Loop + datsSend_requestEx[2].constant_Loop;
+			
+			if(constandLoop_reserve){
+			
+				if(!dtReqEx_counter){
+				
+					u16 current_Insert = constandLoop_reserve % 3;
+
+					if((constandLoop_reserve % 3) == 0){
+
+						os_printf(">>>dtCtrlEach loopParam:%d %d %d.\n", (int)datsSend_requestEx[0].constant_Loop,
+																		 (int)datsSend_requestEx[1].constant_Loop,
+																		 (int)datsSend_requestEx[2].constant_Loop);
+					}
+					
+					while(!datsSend_requestEx[current_Insert].constant_Loop){
+					
+						current_Insert ++;
+						current_Insert %= 3;
+					}
+					
+					datsSend_requestEx[current_Insert].constant_Loop --;
+					
+					datsSend_requestEx[current_Insert].dats[1] = datsSend_requestEx[current_Insert].constant_Loop;
+					ZigB_remoteDatsSend_straightforward(datsSend_requestEx[current_Insert].nwkAddr, datsSend_requestEx[current_Insert].portPoint, datsSend_requestEx[current_Insert].dats, datsSend_requestEx[current_Insert].datsLen);
+					vTaskDelay(4); //40ms 协调性保底延时
+					
+					dtReqEx_counter = DTREQ_EXATTR_ONCEPERIOD;
+				}
+			}
+		}
+
 		/*>>>>>>zigb非阻塞远端数据传输<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<*/
-		{
+		{ //常规
 
 			portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
 			sttUartRcv_rmDatsReqResp rptr_uartDatsRcv;
@@ -2482,7 +2573,6 @@ zigbeeDataTransProcess_task(void *pvParameters){
 						}
 	
 						loop_Insert_temp = 0;  //谨记清零,单次应答只用单次取消指令下达
-
 					}
 				}
 				while(xMsgQ_rcvResult == pdTRUE);
@@ -2641,6 +2731,41 @@ zigbeeDataTransProcess_task(void *pvParameters){
 			detectCounter_zigbSlaveDevListLen = 0;
 
 			zigbNwkReserveNodeNum_currentValue = zigbDev_chatLenDectect(pHead_listDevInfo);
+		}
+
+		{ //互控响应业务
+
+			portBASE_TYPE xMsgQ_rcvResult = pdFALSE;
+			sttUartRcv_ctrlEachDat rptr_ctrlEachDat = {0};
+
+			xMsgQ_rcvResult = xQueueReceive(xMsgQ_uartToutDats_datsComingCtrlEach, (void *)&rptr_ctrlEachDat, (portTickType) 0);
+			if(xMsgQ_rcvResult == pdTRUE){
+
+				u8 localActLoop = 0;
+				u8 statusRelay_temp = status_actuatorRelay;
+
+				os_printf("ctrl eachOther cmd coming, cluster:%02d, val:%02d, loop:%02d.\n", (int)rptr_ctrlEachDat.prot_Ep, (int)rptr_ctrlEachDat.ctrlEachOther_dat, (int)rptr_ctrlEachDat.ctrlEachOther_loop);
+
+				for(localActLoop = 0; localActLoop < USRCLUSTERNUM_CTRLEACHOTHER; localActLoop ++){
+
+					if((rptr_ctrlEachDat.prot_Ep == CTRLEATHER_PORT[localActLoop]) && (rptr_ctrlEachDat.prot_Ep != 0)){ //有效互控端口判断
+
+						if(rptr_ctrlEachDat.ctrlEachOther_loop > datsSend_requestEx[localActLoop].constant_Loop){ //loop大于本地才有效
+
+							statusRelay_temp &= ~(1 << localActLoop); //动作缓存位清零
+							swCommand_fromUsr.objRelay = statusRelay_temp | (rptr_ctrlEachDat.ctrlEachOther_dat << localActLoop); //对应bit 动作位加载
+							swCommand_fromUsr.actMethod = relay_OnOff;
+
+							datsSend_requestEx[localActLoop].constant_Loop = 0;  
+
+							localDataRecord_eaCtrl[localActLoop] = rptr_ctrlEachDat.ctrlEachOther_dat; //本地记录更新
+							(rptr_ctrlEachDat.ctrlEachOther_dat)?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[localActLoop]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[localActLoop]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+
+							devStatus_pushIF = true; //开关状态数据推送
+						}
+					}
+				}
+			}
 		}
 		
 		vTaskDelay(1);

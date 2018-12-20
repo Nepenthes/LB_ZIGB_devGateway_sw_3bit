@@ -19,7 +19,7 @@ u8 zigbNwkReserveNodeNum_currentValue = 0; //zigb网络内当前有效节点数�
 
 stt_scenarioOprateDats scenarioOprateDats = {0};
 
-//u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0x1A, 0x1B, 0x1C}; //互控端口位
+//u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0x1A, 0x1B, 0x1C}; //互控端口位-test
 u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0, 0, 0}; //互控端口位
 
 u8 COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT_NUMTAIL] = {0}; //主机管理表-互控状态管理
@@ -32,7 +32,7 @@ u8 MACDST_ID[DEV_MAC_LEN] = {1,1,1,1,1,1}; //默认不为0即可
 bool deviceLock_flag = false; //设备锁标志
 
 u8 DEV_actReserve = 0x07; //有效操作位
-u8 SWITCH_TYPE = SWITCH_TYPE_SWBIT3;
+u8 SWITCH_TYPE = SWITCH_TYPE_CURTAIN;	
 
 static bool flashReadLocalDev_reserveFLG = true; //互斥标志:本地信息读
 static bool flashWriteLocalDev_reserveFLG = true; //互斥标志:本地信息写
@@ -81,14 +81,16 @@ portCtrlEachOther_Reales(void){
 void ICACHE_FLASH_ATTR
 devMAC_Reales(void){
 
-	const u8 debug_staMAC[DEV_MAC_LEN] = {0x20, 0x20, 0x15, 0x22, 0x33, 0xAA};
-	const u8 debug_apMAC[DEV_MAC_LEN] = {0x20, 0x20, 0x15, 0x22, 0x33, 0xAA};
-
-//	wifi_get_macaddr(STATION_IF, MACSTA_ID); //获取staMAC
-//	wifi_get_macaddr(SOFTAP_IF, MACAP_ID); //获取apMAC
-
+	const u8 debug_staMAC[DEV_MAC_LEN] = {0x20, 0x20, 0x00, 0x00, 0x00, 0xAA};
+	const u8 debug_apMAC[DEV_MAC_LEN] = {0x20, 0x20, 0x00, 0x00, 0x00, 0xBB};
+	
+#if(DEV_MAC_SOURCE_DEF == DEV_MAC_SOURCE_WIFI)
+	wifi_get_macaddr(STATION_IF, MACSTA_ID); //获取staMAC
+	wifi_get_macaddr(SOFTAP_IF, MACAP_ID); //获取apMAC
+#else
 	memcpy(MACSTA_ID, debug_staMAC, 6);
 	memcpy(MACAP_ID, debug_apMAC, 6);
+#endif
 }
 
 void ICACHE_FLASH_ATTR
@@ -158,6 +160,12 @@ devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSav
 
 				dats_Temp.timeZone_M = datsSave_Temp.timeZone_M;
 
+			}break;
+
+		case obi_devCurtainOrbitalPeriod:{
+
+				dats_Temp.devCurtain_orbitalPeriod = datsSave_Temp.devCurtain_orbitalPeriod;
+		
 			}break;
 
 		case obj_serverIP_default:{
@@ -342,11 +350,16 @@ devData_recoverFactory(void){
 				    (u32 *)&dats_Temp,
 				    sizeof(stt_usrDats_privateSave));
 
+	//打生日标记 -(生日标记占用大小为1bit 赋0即可打标记，扇区清零已作用执行)
+
 	//默认值填装
 	dats_Temp.bkColor_swON = TIPSBKCOLOR_DEFAULT_ON;
 	dats_Temp.bkColor_swOFF = TIPSBKCOLOR_DEFAULT_OFF;
 	devParam_flashDataSave(obj_bkColor_swON, dats_Temp);
 	devParam_flashDataSave(obj_bkColor_swOFF, dats_Temp);
+
+	dats_Temp.devCurtain_orbitalPeriod = 10;
+	devParam_flashDataSave(obi_devCurtainOrbitalPeriod, dats_Temp);
 }
 
 void ICACHE_FLASH_ATTR
@@ -356,6 +369,8 @@ devFactoryRecord_Opreat(void){
 
 	if(datsRead_Temp->FLG_factory_IF){
 
+		os_printf(">>>factory cover!!!\n");
+		vTaskDelay(10);
 		devData_recoverFactory();
 	}
 

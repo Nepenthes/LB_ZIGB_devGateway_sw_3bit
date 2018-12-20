@@ -10,6 +10,7 @@
 #include "datsManage.h"
 
 #include "usrInterface_keylbutton.h"
+#include "hwPeripherial_Actuator.h"
 #include "usrInterface_Tips.h"
 #include "timer_Activing.h"
 
@@ -624,6 +625,8 @@ timerFunCB_hw595and597datsReales(void *para){
 
 			//tips动作周期计时计数专用
 			if(counter_tipsAct)counter_tipsAct --;
+
+			if(combinationFunFLG_3S5S_cancel_counter)combinationFunFLG_3S5S_cancel_counter --;
 		}
 	}
 

@@ -21,23 +21,27 @@
 
 #define DEVICE_VERSION_NUM		7		//设备版本号：L7 
 
-#define DEV_SWITCH_TYPE			0xA3	//开关设备类型默认值
-#define DEV_MAC_LEN				6
+#define DEV_MAC_LEN				6		//MAC地址长度
+
+#define DEV_MAC_SOURCE_ZIGBEE	0x0A	//MAC地址源：zigbee IEEE
+#define DEV_MAC_SOURCE_WIFI		0x0B	//MAC地址源：WIFI	IEEE
+#define DEV_MAC_SOURCE_DEF		DEV_MAC_SOURCE_WIFI	//MAC地址源定义
 
 #define SMARTCONFIG_TIMEOPEN_DEFULT		180 //smartconfig启动时间限制 单位：s
 
-#define SWITCH_TYPE_SWBIT1	 	0x01 + 0xA0 //设备类型，一位开关
-#define SWITCH_TYPE_SWBIT2	 	0x02 + 0xA0 //设备类型，二位开关
-#define SWITCH_TYPE_SWBIT3	 	0x03 + 0xA0 //设备类型，三位开关
+#define SWITCH_TYPE_SWBIT1	 	(0xA0 + 0x01) //设备类型，一位开关
+#define SWITCH_TYPE_SWBIT2	 	(0xA0 + 0x02) //设备类型，二位开关
+#define SWITCH_TYPE_SWBIT3	 	(0xA0 + 0x03) //设备类型，三位开关
+#define SWITCH_TYPE_CURTAIN		(0xA0 + 0x08) //设备类型，窗帘
 
 #define SPI_FLASH_SEC_SIZE      4096
 #define DATS_LOCATION_START		0x3F9	//32Mbit
 //#define DATS_LOCATION_START		0x1F9	//16Mbit
 //#define DATS_LOCATION_START		0x0F9	//08Mbit
 
-#define FLASH_USROPREATION_ADDR_OFFSET_DEVLOCALINFO_RECORD		0 //记录单元扇区偏移地址：本地设备信息数据
-#define FLASH_USROPREATION_ADDR_OFFSET_SLAVEDEVLIST_RECORD		1 //记录单元扇区偏移地址：子设备列表信息数据
-#define FLASH_USROPREATION_ADDR_OFFSET_SPERELAYSTATUS_RECORD	2 //记录单元扇区偏移地址：特殊独立继电器实时状态信息数据
+#define FLASH_USROPREATION_ADDR_OFFSET_DEVLOCALINFO_RECORD		0 //记录单元扇区地址偏移量：本地设备信息数据
+#define FLASH_USROPREATION_ADDR_OFFSET_SLAVEDEVLIST_RECORD		1 //记录单元扇区地址偏移量：子设备列表信息数据
+#define FLASH_USROPREATION_ADDR_OFFSET_SPERELAYSTATUS_RECORD	2 //记录单元扇区地址偏移量：特殊独立继电器实时状态信息数据
 
 #define RELAYSTATUS_REALYTIME_ENABLEIF		0 //是否将继电器状态进行独立记录 <在开关记忆使能情况下，开启此功能可以消除触摸时闪烁>
 
@@ -74,6 +78,8 @@ typedef struct{
 	u8  timeZone_M;
 
 	u8 	serverIP_default[4];	//默认服务器IP
+
+	u8	devCurtain_orbitalPeriod;	//开关类型为开关时，轨道周期时间
 
 	u8  swTimer_Tab[3 * 8];	//定时表
 	u8  swDelay_flg; //延时及绿色模式标志
@@ -119,6 +125,8 @@ typedef enum{
 	obj_timeZone_H,
 	obj_timeZone_M,
 
+	obi_devCurtainOrbitalPeriod,
+
 	obj_swTimer_Tab,
 	obj_swDelay_flg,
 	obj_swDelay_periodCloseLoop,
@@ -145,7 +153,7 @@ typedef struct STTthreadDatsPass_conv{	//数据传输进程消息类型1：常�
 	threadDatsPass_objDatsFrom datsFrom;	//数据来源
 	u8	macAddr[5];
 	u8	devType;
-	u8	dats[100];
+	u8	dats[128];
 	u8  datsLen;
 }stt_threadDatsPass_conv;
 
@@ -186,9 +194,10 @@ typedef struct agingDataSet_bitHold{ //使用指针强转时注意，agingCmd_sw
 	
 	u8 agingCmd_horsingLight:1; //时效_跑马灯设置 -bit0
 	u8 agingCmd_switchBitBindSetOpreat:3; //时效_开关互控组号设置_针对三个开关位进行设置 -bit1...bit3
-	u8 statusRef_bitReserve:4; //时效_bit保留 -bit1...bit7
+	u8 agingCmd_curtainOpPeriodSetOpreat:1; //时效_针对窗帘轨道时间设置 -bit4
+	u8 statusRef_bitReserve:3; //时效_bit保留 -bit5...bit7
 	
-	u8 agingCmd_byteReserve[4];	//5字节占位保留
+	u8 agingCmd_byteReserve[4];	//4字节占位保留
 	
 }stt_agingDataSet_bitHold; //standard_length = 6Bytes
 
@@ -222,7 +231,27 @@ typedef struct dataPonit{
 	u8									devData_bkLight[2]; //背光灯颜色, 2Bytes
 	u8									devData_devReset; //开关复位数据, 1Bytes
 	u8									devData_switchBitBind[3]; //开关位互控绑定数据, 3Bytes
+
+	union devClassfication{ //数据从此处开始分类
 	
+		struct funParam_curtain{ //窗帘
+		
+			u8 orbital_Period;
+			
+		}curtain_param;
+		
+		struct funParam_socket{ //插座
+		
+			u8 data_eleConsum[3];
+			u8 data_elePower[4];
+			u8 data_corTime;
+			
+			u8 dataDebug_powerFreq[4]; //debug数据-power频率
+			
+		}socket_param;
+		
+	}union_devParam;
+
 }stt_devOpreatDataPonit; //standard_length = 49Bytes
 /*=======================↑↑↑定时询访机制专用数据结构↑↑↑=============================*/
 

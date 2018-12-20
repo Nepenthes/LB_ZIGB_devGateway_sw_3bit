@@ -85,5 +85,6 @@
  ../include/datsManage.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/freertos/queue.h \
  ../include/datsProcess_uartZigbee.h ../include/datsManage.h \
- ../include/usrInterface_keylbutton.h ../include/usrInterface_Tips.h \
+ ../include/usrInterface_keylbutton.h ../include/hwPeripherial_Actuator.h \
+ ../include/bsp_Hardware.h ../include/usrInterface_Tips.h \
  ../include/timer_Activing.h

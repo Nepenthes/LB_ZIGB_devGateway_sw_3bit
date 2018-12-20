@@ -85,11 +85,18 @@ timerFunCB_sntpTimerAct(void *para){
 				os_printf("[Tips_timer]: date:%s\n", sntp_get_real_time(timeStmap_temp));
 
 				xQueueSend(xMsgQ_timeStampGet, (void *)&timeStmap_temp, 10);
+			
+			}else{
+
+				nwkInternetOnline_IF = false;
 			}
 			
 		}else{
 
 			nwkInternetOnline_IF = false;
+		}
+
+		if(!nwkInternetOnline_IF){ //中途掉线，重新初始化sntp
 
 			os_timer_disarm(&timer_sntpTimerAct);
 			os_printf("[Tips_timer]: sntp outline, reDetecting!!!\n");
@@ -295,14 +302,14 @@ timActingProcess_task(void *pvParameters){
 				
 				if(!timeTab_reserveFLG){ //时段反序判断 -顺序
 				
-					((minutesTemp_CalibrateTab_cur > minutesTemp_CalibrateTab_A)&&\
-					 (minutesTemp_CalibrateTab_cur <= minutesTemp_CalibrateTab_B))?\
+					((minutesTemp_CalibrateTab_cur >= 	minutesTemp_CalibrateTab_A)&&\
+					 (minutesTemp_CalibrateTab_cur < 	minutesTemp_CalibrateTab_B))?\
 						(ifNightMode_sw_running_FLAG = 1):(ifNightMode_sw_running_FLAG = 0);
 				
 				}else{ //时段反序判断 -反序
 				
-					((minutesTemp_CalibrateTab_cur > minutesTemp_CalibrateTab_A)||\
-					 (minutesTemp_CalibrateTab_cur <= minutesTemp_CalibrateTab_B))?\
+					((minutesTemp_CalibrateTab_cur >=	minutesTemp_CalibrateTab_A)||\
+					 (minutesTemp_CalibrateTab_cur <	minutesTemp_CalibrateTab_B))?\
 						(ifNightMode_sw_running_FLAG = 1):(ifNightMode_sw_running_FLAG = 0);
 				}
 				

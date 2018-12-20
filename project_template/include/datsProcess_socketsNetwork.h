@@ -93,7 +93,7 @@ typedef struct{
 	datsTrans_dstObj	dstObj;			//数据是给wifi还是zigb
 	socket_OBJ 			portObj;		//数据对象（本地还是远端）
 	u8 command;		//命令
-	u8 dats[96];	//数据
+	u8 dats[128];	//数据
 	u8 datsLen;		//数据长度
 }stt_socketDats;
 
@@ -103,6 +103,9 @@ extern xQueueHandle xMsgQ_datsFromSocketPort;
 
 void network_mainThreadStart(void);
 u8 frame_Check(unsigned char frame_temp[], u8 check_num);
+
+void timer_heartBeat_Pause(void);
+void timer_heartBeat_Recoery(void);
 
 #endif
 

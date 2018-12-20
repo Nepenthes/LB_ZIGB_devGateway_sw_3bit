@@ -27,6 +27,20 @@ typedef enum{
 
 typedef struct{
 
+	u8 act_counter;
+	u8 act_period;
+	
+	enum{
+	
+		cTact_stop = 0,
+		cTact_close,
+		cTact_open,
+	}act;
+
+}stt_motorAttr;
+
+typedef struct{
+
 	u8 objRelay;
 	rly_methodType actMethod;
 }relay_Command;
@@ -42,10 +56,12 @@ extern status_ifSave relayStatus_ifSave;
 extern relay_Command swCommand_fromUsr;
 extern bool devStatus_ctrlEachO_IF;
 extern u8 EACHCTRL_realesFLG;
+extern stt_motorAttr curtainAct_Param;
 extern bool devStatus_pushIF;
 extern relayStatus_PUSH devActionPush_IF;
 
 void actuatorRelay_Init(void);	
+void curtainOrbitalPeriod_Reales(void);
 void relayActing_ThreadStart(void);
 
 #endif

@@ -12,6 +12,13 @@ relay_Command swCommand_fromUsr	= {0, actionNull};
 bool devStatus_ctrlEachO_IF = false; //互控状态组播发送使能--为使异步信号同步
 u8 EACHCTRL_realesFLG = 0; //互控更新使能标志 标志（一位：bit0\二位：bit1\三位：bit2）
 
+stt_motorAttr curtainAct_Param = {
+	
+	.act_counter = 0, 
+	.act_period = 10, 
+	.act = cTact_stop
+};
+
 bool devStatus_pushIF = false; //推送使能-为使异步信号同步
 relayStatus_PUSH devActionPush_IF = {0}; //推送执行数据
 
@@ -22,6 +29,37 @@ LOCAL void ICACHE_FLASH_ATTR
 relay_statusReales(void){
 	
 	switch(SWITCH_TYPE){
+
+		case SWITCH_TYPE_CURTAIN:{
+		
+			switch(status_actuatorRelay){
+			
+				case 1:{
+				
+					PIN_RELAY_2 = 1;
+					PIN_RELAY_1 = PIN_RELAY_3 = 0;
+					curtainAct_Param.act = cTact_open;
+					
+				}break;
+					
+				case 4:{
+				
+					PIN_RELAY_1 = 1;
+					PIN_RELAY_2 = PIN_RELAY_3 = 0;
+					curtainAct_Param.act = cTact_close;
+					
+				}break;
+					
+				case 2:
+				default:{
+				
+					PIN_RELAY_1 = PIN_RELAY_2 = PIN_RELAY_3 = 0;
+					curtainAct_Param.act = cTact_stop;
+					
+				}break;
+			}
+		
+		}break;
 	
 		case SWITCH_TYPE_SWBIT1:{ //继电器位位置调整 2对1
 		
@@ -43,6 +81,8 @@ relay_statusReales(void){
 			if(DEV_actReserve & 0x04)(status_actuatorRelay & 0x04)?(PIN_RELAY_3 = 1):(PIN_RELAY_3 = 0);
 		
 		}break;
+
+		default:break;
 	}
 
 	tips_statusChangeToNormal(); //tips响应
@@ -118,7 +158,22 @@ actuatorRelay_Act(relay_Command dats){
 LOCAL void ICACHE_FLASH_ATTR
 relayActingProcess_task(void *pvParameters){
 
+	u16 log_Counter = 0;
+	const u16 log_Period = 200;
+
+	os_printf(">>>curtain orbital period recover val:%d\n", curtainAct_Param.act_period);
+
 	for(;;){
+
+//		{ //打印
+
+//			if(log_Counter < log_Period)log_Counter ++;
+//			else{
+
+//				log_Counter = 0;
+//				os_printf(">>>devType: %02X, act:%d, actCounter: %d, actPeriod: %d.\n", SWITCH_TYPE, curtainAct_Param.act, curtainAct_Param.act_counter, curtainAct_Param.act_period);
+//			}
+//		}
 	
 		if(swCommand_fromUsr.actMethod != actionNull){ //请求响应
 		
@@ -132,6 +187,20 @@ relayActingProcess_task(void *pvParameters){
 	}
 
 	vTaskDelete(NULL);
+}
+
+void ICACHE_FLASH_ATTR
+curtainOrbitalPeriod_Reales(void){
+
+	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
+	
+	curtainAct_Param.act_period = datsRead_Temp->devCurtain_orbitalPeriod; //窗帘轨道时间初始化更新
+	
+	if(!curtainAct_Param.act_period)curtainAct_Param.act_period = 240;
+	else
+	if(curtainAct_Param.act_period == 0xff)curtainAct_Param.act_period = 10;
+	
+	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
 void ICACHE_FLASH_ATTR

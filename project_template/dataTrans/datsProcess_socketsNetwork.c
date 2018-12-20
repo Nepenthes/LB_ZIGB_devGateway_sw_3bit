@@ -30,12 +30,6 @@ bool nwkInternetOnline_IF = false;	//internet网络在线标志
 xQueueHandle xMsgQ_Socket2Zigb;
 xQueueHandle xMsgQ_datsFromSocketPort;
 
-LOCAL xTaskHandle pxTaskHandle_threadNWK;
-
-LOCAL internet_connFLG = false;	//STA网络在线标志
-
-LOCAL os_timer_t timer_heartBeatKeep;
-
 u8 heartbeat_Period = (u8)(PERIOD_HEARTBEAT_ASR / timer_heartBeatKeep_Period);	//周期性数据传输间隔定义
 u8 heartbeat_Cnt = 0;	//心跳包周期计数
 
@@ -55,6 +49,15 @@ const u8 test_Dats2[14] = {
 
 	0xAA, 0x0E, 0x22, 0x00, 0x20, 0x15, 0x07, 0x12, 0x36, 0xFF, 0xFF, 0x00, 0x00, 0x00 
 };
+
+LOCAL xTaskHandle pxTaskHandle_threadNWK;
+
+LOCAL internet_connFLG = false;	//STA网络在线标志
+
+LOCAL os_timer_t timer_heartBeatKeep;
+
+LOCAL void timer_heartBeatKeep_funCB(void *para);
+
 /*---------------------------------------------------------------------------------------------*/
 
 /*********************网络数据自定义校验*****************************/
@@ -170,6 +173,19 @@ sockets_datsSend(socket_OBJ sObj, u8 dats[], u16 datsLen){
 
 		return FAIL;
 	}
+}
+
+void ICACHE_FLASH_ATTR
+timer_heartBeat_Pause(void){
+
+	os_timer_disarm(&timer_heartBeatKeep);
+}
+
+void ICACHE_FLASH_ATTR
+timer_heartBeat_Recovery(void){
+
+	os_timer_setfn(&timer_heartBeatKeep, (os_timer_func_t *)timer_heartBeatKeep_funCB, NULL);
+	os_timer_arm(&timer_heartBeatKeep, timer_heartBeatKeep_Period, true);
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -336,11 +352,11 @@ socketsDataTransProcess_task(void *pvParameters){
 	stt_socketDats 		rptr_socketDats;
 	portBASE_TYPE 		xMsgQ_rcvResult = pdFALSE;
 
-#define socketsData_repeatTxLen	45
+#define socketsData_repeatTxLen	128
 	u8 repeatTX_buff[socketsData_repeatTxLen] = {0};
 	u8 repeatTX_Len = 0;
 
-#define socketsData_datsTxLen	72
+#define socketsData_datsTxLen	128
 	u8 datsTX_buff[socketsData_datsTxLen] = {0};
 	u8 datsTX_Len = 0;
 
@@ -934,6 +950,10 @@ socketsDataTransProcess_task(void *pvParameters){
 									if(memcmp(&agingCmd_Temp, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold))){
 
 										heartbeat_Cnt = heartbeat_Period; //有时效控制，强行提前定时通讯，即时回码
+
+//										printf_datsHtoA(">>>>>>>>agingCMD bytes:", &rptr_socketDats.dats[15], 6);
+
+										beeps_usrActive(3, 25, 1);
 										
 										memcpy(&dev_agingCmd_rcvPassive, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold)); //本地被动时效操作缓存同步更新，用于原位回发
 										
@@ -944,7 +964,12 @@ socketsDataTransProcess_task(void *pvParameters){
 												swCommand_fromUsr.objRelay = dev_dataPointTemp.devStatus_Reference.statusRef_swStatus;
 												swCommand_fromUsr.actMethod = relay_OnOff;
 
-												devActionPush_IF.push_IF = 1;
+												if((SWITCH_TYPE == SWITCH_TYPE_SWBIT1) || //多位开关才存在推送
+												   (SWITCH_TYPE == SWITCH_TYPE_SWBIT2) ||
+												   (SWITCH_TYPE == SWITCH_TYPE_SWBIT3)){
+
+														devActionPush_IF.push_IF = 1; //推送使能
+												}
 
 												os_printf(">>>>>>>>relayStatus reales:%02X, currentVal:%02X.\n", (int)status_actuatorRelay & 0x07, (int)dev_dataPointTemp.devStatus_Reference.statusRef_swStatus);
 											}
@@ -1087,6 +1112,19 @@ socketsDataTransProcess_task(void *pvParameters){
 																																			  (int)dev_dataPointTemp.devData_switchBitBind[1], 
 																																			  (int)dev_dataPointTemp.devData_switchBitBind[2]);
 										}
+
+										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_curtainOpPeriodSetOpreat){ //窗帘轨道时间设置操作，需要时效
+
+											curtainAct_Param.act_period = dev_dataPointTemp.union_devParam.curtain_param.orbital_Period; //本地运行缓存更新
+											datsSave_Temp.devCurtain_orbitalPeriod = dev_dataPointTemp.union_devParam.curtain_param.orbital_Period; //本地存储更新
+											devParam_flashDataSave(obi_devCurtainOrbitalPeriod, datsSave_Temp); //本地存储动作执行
+											
+											if(!curtainAct_Param.act_period)curtainAct_Param.act_period = 240;
+											else
+											if(curtainAct_Param.act_period == 0xff)curtainAct_Param.act_period = 10;
+
+											os_printf(">>>>>>>>agingCmd curtainOrbitalSet coming, valSet:%d .\n", (int)dev_dataPointTemp.union_devParam.curtain_param.orbital_Period);
+										}
 									}
 									else{
 
@@ -1112,9 +1150,14 @@ socketsDataTransProcess_task(void *pvParameters){
 										
 									}else{
 
-										heartbeat_Period = (u8)(PERIOD_HEARTBEAT_ASR / timer_heartBeatKeep_Period); //定时周期切换为被动
-										memset(&dev_agingCmd_sndInitative, 0, sizeof(stt_agingDataSet_bitHold)); //主动发送动作时效清零
-										dtModeKeepAcess_currentCmd = DTMODEKEEPACESS_FRAMECMD_ASR;
+										bool heartbeat_Period_recoveryToASR_EN = true; //从主动回复到被动使能
+
+										if(heartbeat_Period_recoveryToASR_EN){
+
+											heartbeat_Period = (u8)(PERIOD_HEARTBEAT_ASR / timer_heartBeatKeep_Period); //定时周期切换为被动
+											memset(&dev_agingCmd_sndInitative, 0, sizeof(stt_agingDataSet_bitHold)); //主动发送动作时效清零
+											dtModeKeepAcess_currentCmd = DTMODEKEEPACESS_FRAMECMD_ASR;
+										}
 									}
 
 								}break;

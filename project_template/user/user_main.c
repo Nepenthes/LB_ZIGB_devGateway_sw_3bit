@@ -65,6 +65,7 @@ extern xQueueHandle xMsgQ_devUpgrade;
 
 extern stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen];
 extern stt_dataScenarioReq localZigbASYDT_bufQueueScenarioReq[zigB_ScenarioCtrlDataTransASY_QbuffLen];
+extern u16 dtReqEx_counter;
 
 extern u8 internetRemoteServer_portSwitchPeriod;
 
@@ -537,15 +538,83 @@ timerFunCB_usrReference(void *para){
 		}
 	}
 
+	{ //100ms专用计时，<窗帘>
+
+		const u16 period_100ms 	= 200;
+		static u16 counter_100ms = 0; 
+		const u8 period5_200ms = 5;
+		static u8 counter5_200ms = 0; 
+
+		if(counter_100ms < period_100ms)counter_100ms ++;
+		else{
+			
+			counter_100ms = 0;
+			counter5_200ms ++;
+
+//			os_printf("%d\n", curtainAct_Param.act);
+		
+			/*窗帘逻辑业务，按照轨道时间动作*/
+			if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN){
+
+				switch(curtainAct_Param.act){
+				
+					case cTact_open:{
+					
+						if(curtainAct_Param.act_counter < curtainAct_Param.act_period){
+							
+							if(counter5_200ms >= period5_200ms)curtainAct_Param.act_counter ++;
+							
+						}else{
+						
+							curtainAct_Param.act = cTact_stop;
+						}
+						
+					}break;
+						
+					case cTact_close:{
+					
+						if(curtainAct_Param.act_counter > 0){
+						
+							if(counter5_200ms >= period5_200ms)curtainAct_Param.act_counter --;
+							
+						}else{
+						
+							curtainAct_Param.act = cTact_stop;
+						}
+					
+					}break;
+						
+					case cTact_stop:{
+					
+						if(status_actuatorRelay != 2){
+						
+							swCommand_fromUsr.objRelay = 2;
+							swCommand_fromUsr.actMethod = relay_OnOff;
+							devActionPush_IF.push_IF = 1; //推送使能
+						}
+						
+					}break;
+						
+					default:{}break;
+				}
+			}
+			
+			if(counter5_200ms >= period5_200ms)counter5_200ms = 0;
+		}
+	}
+
 	/*其它1ms定时业务*/
 	for(loop = 0; loop < zigB_remoteDataTransASY_QbuffLen; loop ++){ //普通远端数据请求异步发送缓存周期判断
 
 		if(localZigbASYDT_bufQueueRemoteReq[loop].dataReqPeriod)localZigbASYDT_bufQueueRemoteReq[loop].dataReqPeriod --;
 	}
+	
 	for(loop = 0; loop < zigB_ScenarioCtrlDataTransASY_QbuffLen; loop ++){
 
 		if(localZigbASYDT_bufQueueScenarioReq[loop].dataReqPeriod)localZigbASYDT_bufQueueScenarioReq[loop].dataReqPeriod --;
 	}
+
+	if(dtReqEx_counter)dtReqEx_counter --;
 }
 
 LOCAL void ICACHE_FLASH_ATTR
@@ -553,6 +622,7 @@ somartConfig_standBy(void){ //smartConfig时中断所有定时器
 
 	os_timer_disarm(&timer_Test);
 	os_timer_disarm(&usrTimer_reference);
+//	timer_heartBeat_Pause();
 	localTimerPause_sntpTimerAct();
 }
 
@@ -561,6 +631,7 @@ somartConfig_complete(void){ //smartConfig结束时恢复所有被中断的定�
 
 	os_timer_arm(&timer_Test, TIMERPERIOD_USRTEST_FUN, true);
 	os_timer_arm(&usrTimer_reference, TIMERPERIOD_SPECIAL1MS_FUN, true);
+//	timer_heartBeat_Recovery();
 	localTimerRecover_sntpTimerAct();
 }
 
@@ -610,6 +681,7 @@ void user_init(void)
 	datsDelayOP_getReales(); //延时操作数据更新
 	devLockIF_Reales(); //设备锁数据更新
 	timeZone_Reales(); //时区更新
+	curtainOrbitalPeriod_Reales(); //窗帘轨道周期更新
 	
 //	wifi_station_disconnect();
 	wifi_station_set_auto_connect(1); 
