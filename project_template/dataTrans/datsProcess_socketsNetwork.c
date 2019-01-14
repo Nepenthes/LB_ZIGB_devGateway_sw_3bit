@@ -22,8 +22,7 @@
 extern u8 	swTim_onShoot_FLAG; 
 extern bool ifTim_sw_running_FLAG; 
 
-extern u8 tipsInsert_swLedBKG_ON;
-extern u8 tipsInsert_swLedBKG_OFF;
+extern bkLightColorInsert_paramAttr devBackgroundLight_param;
 
 bool nwkInternetOnline_IF = false;	//internet网络在线标志
 
@@ -61,7 +60,7 @@ LOCAL void timer_heartBeatKeep_funCB(void *para);
 /*---------------------------------------------------------------------------------------------*/
 
 /*********************网络数据自定义校验*****************************/
-u8 ICACHE_FLASH_ATTR
+u8 
 frame_Check(unsigned char frame_temp[], u8 check_num){
   
 	u8 loop 		= 0;
@@ -78,7 +77,7 @@ frame_Check(unsigned char frame_temp[], u8 check_num){
 	return val_Check;
 }
 
-LOCAL STATUS ICACHE_FLASH_ATTR
+LOCAL STATUS 
 appMsgQueueCreat_S2Z(void){
 
 	xMsgQ_Socket2Zigb = xQueueCreate(30, sizeof(stt_threadDatsPass));
@@ -86,7 +85,7 @@ appMsgQueueCreat_S2Z(void){
 	else return FAIL;
 }
 
-LOCAL STATUS ICACHE_FLASH_ATTR
+LOCAL STATUS 
 appMsgQueueCreat_datsFromSocket(void){
 
 	xMsgQ_datsFromSocketPort = xQueueCreate(30, sizeof(stt_socketDats));
@@ -95,7 +94,7 @@ appMsgQueueCreat_datsFromSocket(void){
 }
 
 /*本函数在socket数据发送前最后调用*///提前调用将影响校验码计算
-LOCAL u8 ICACHE_FLASH_ATTR
+LOCAL u8 
 dtasTX_loadBasic_CUSTOM(socketDataTrans_obj datsObj,
 							   u8 dats_Tx[45],
 							   u8 frame_Type,
@@ -153,7 +152,7 @@ dtasTX_loadBasic_CUSTOM(socketDataTrans_obj datsObj,
 	}	
 }
 
-LOCAL STATUS ICACHE_FLASH_ATTR
+LOCAL STATUS 
 sockets_datsSend(socket_OBJ sObj, u8 dats[], u16 datsLen){
 
 	if(internet_connFLG || (SOFTAP_MODE == wifi_get_opmode())){
@@ -175,20 +174,20 @@ sockets_datsSend(socket_OBJ sObj, u8 dats[], u16 datsLen){
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 timer_heartBeat_Pause(void){
 
 	os_timer_disarm(&timer_heartBeatKeep);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 timer_heartBeat_Recovery(void){
 
 	os_timer_setfn(&timer_heartBeatKeep, (os_timer_func_t *)timer_heartBeatKeep_funCB, NULL);
 	os_timer_arm(&timer_heartBeatKeep, timer_heartBeatKeep_Period, true);
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 timer_heartBeatKeep_funCB(void *para){
 
 	struct ip_info ipConfig_info;
@@ -284,8 +283,7 @@ timer_heartBeatKeep_funCB(void *para){
 
 //				printf_datsHtoA("btMode data upload:", dev_currentDataPoint.devData_nightMode, 6);
 			}
-			memcpy(&dev_currentDataPoint.devData_bkLight[0], &(datsRead_Temp->bkColor_swON), 1);
-			memcpy(&dev_currentDataPoint.devData_bkLight[1], &(datsRead_Temp->bkColor_swOFF), 1);
+			memcpy(&(dev_currentDataPoint.devData_bkLight[0]), &(datsRead_Temp->param_bkLightColorInsert), 2);
 			dev_currentDataPoint.devData_devReset = 0;
 			memcpy(dev_currentDataPoint.devData_switchBitBind, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER);
 
@@ -324,13 +322,15 @@ timer_heartBeatKeep_funCB(void *para){
 			frameTx_dataLen += sizeof(stt_devOpreatDataPonit);
 			frameTx_dataLen ++;
 			frameTx_temp[1] 					= frameTx_dataLen;
-			frameTx_temp[frameTx_dataLen - 1] = frame_Check(&frameTx_temp[1], frameTx_dataLen - 2); //校验码最后算
+			frameTx_temp[frameTx_dataLen - 1] 	= frame_Check(&frameTx_temp[1], frameTx_dataLen - 2); //校验码最后算
 
 			if(datsRead_Temp)os_free(datsRead_Temp);
 
 #endif
 
 			sockets_datsSend(Obj_udpRemote_B, frameTx_temp, frameTx_dataLen);
+
+			printf_datsHtoB("[Tips_threadNet]: current aging bit hold:", (u8 *)(&dev_currentDataPoint.devAgingOpreat_agingReference), sizeof(stt_agingDataSet_bitHold));
 			
 //			printf_datsHtoA("[Tips_threadNet]: hearBeat datsSend is:", heartBeat_Pack, dataHeartBeatLength_objSERVER);
 //			(heartbeat_oeFLG)?(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats1, 14)):(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats2, 14));
@@ -342,7 +342,7 @@ timer_heartBeatKeep_funCB(void *para){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 socketsDataTransProcess_task(void *pvParameters){
 
 //	spi_flash_write(uint32 des_addr, uint32 * src_addr, uint32 size)
@@ -397,6 +397,9 @@ socketsDataTransProcess_task(void *pvParameters){
 
 							swCommand_fromUsr.objRelay = rptr_socketDats.dats[11];
 							swCommand_fromUsr.actMethod = relay_OnOff;
+							if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+							else
+							if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
 
 							os_printf("ctrl data: %02X, pushData: %02X.\n", rptr_socketDats.dats[11], repeatTX_buff[11]);
 		
@@ -764,13 +767,8 @@ socketsDataTransProcess_task(void *pvParameters){
 
 						case FRAME_MtoZIGBCMD_cmdCfg_ledBackSet:{
 
-							tipsInsert_swLedBKG_ON 	= rptr_socketDats.dats[14]; //运行数据加载
-							tipsInsert_swLedBKG_OFF = rptr_socketDats.dats[15];
-
-							datsSave_Temp.bkColor_swON 	= tipsInsert_swLedBKG_ON; //存储数据更新
-							datsSave_Temp.bkColor_swOFF = tipsInsert_swLedBKG_OFF;
-							devParam_flashDataSave(obj_bkColor_swON, datsSave_Temp);
-							devParam_flashDataSave(obj_bkColor_swOFF, datsSave_Temp);
+							memcpy(&devBackgroundLight_param, &(rptr_socketDats.dats[14]), sizeof(bkLightColorInsert_paramAttr)); //运行缓存更新
+							memcpy(&datsSave_Temp.param_bkLightColorInsert, &devBackgroundLight_param, sizeof(bkLightColorInsert_paramAttr)); //本地存储更新
 
 							socketRespond_IF = true;
 
@@ -778,8 +776,7 @@ socketsDataTransProcess_task(void *pvParameters){
 
 						case FRAME_MtoZIGBCMD_cmdQue_ledBackSet:{
 
-							repeatTX_buff[14] = tipsInsert_swLedBKG_ON;
-							repeatTX_buff[15] = tipsInsert_swLedBKG_OFF;
+							memcpy(&repeatTX_buff[14], &devBackgroundLight_param, sizeof(bkLightColorInsert_paramAttr));
 								
 							socketRespond_IF = true;
 						
@@ -797,7 +794,10 @@ socketsDataTransProcess_task(void *pvParameters){
 
 										swCommand_fromUsr.objRelay = scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus;
 										swCommand_fromUsr.actMethod = relay_OnOff;
-
+										if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+										else
+										if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
+										
 										memset(&scenarioOprateDats.scenarioOprate_Unit[loop], 0, 1 * sizeof(scenarioOprateUnit_Attr)); //同时从场景控制表中剔除网关自身
 										memcpy(&scenarioOprateDats.scenarioOprate_Unit[loop], &scenarioOprateDats.scenarioOprate_Unit[loop + 1], (zigB_ScenarioCtrlDataTransASY_QbuffLen - loop - 1) * sizeof(scenarioOprateUnit_Attr));
 										scenarioOprateDats.devNode_num --;
@@ -925,6 +925,9 @@ socketsDataTransProcess_task(void *pvParameters){
 						
 						bool frameCodeCheck_PASS = false; //校验码检查通过标志
 						bool frameMacCheck_PASS  = false; //MAC资质检查通过标志
+						bool frameDataOnceReserve_PASS = false; //当前数据包单次可用标志
+
+						static u8 dataTrans_oncePword = 0;	//数据传输单次可用口令 -用于区分是操作截止还是重发
 
 						internetRemoteServer_portSwitchPeriod = INTERNET_SERVERPORT_SWITCHPERIOD; //远端服务器端口切换周期更新
 
@@ -936,12 +939,12 @@ socketsDataTransProcess_task(void *pvParameters){
 								  rptr_socketDats.dats[6],
 								  rptr_socketDats.command);
 
-						if(rptr_socketDats.dats[rptr_socketDats.dats[1] - 1] == frame_Check(&rptr_socketDats.dats[1], rptr_socketDats.dats[1] - 2))frameCodeCheck_PASS = true;
-						if(!memcmp(&rptr_socketDats.dats[2], &MACSTA_ID[1], 5))frameMacCheck_PASS = 1;
+						if(rptr_socketDats.dats[rptr_socketDats.dats[1] - 1] == frame_Check(&rptr_socketDats.dats[1], rptr_socketDats.dats[1] - 2))frameCodeCheck_PASS = true; //校验码校验
+						if(!memcmp(&rptr_socketDats.dats[2], &MACSTA_ID[1], 5))frameMacCheck_PASS = true; //MAC地址校验
 
 						if(frameCodeCheck_PASS && frameMacCheck_PASS){ 
 
-							memcpy(&dev_dataPointTemp, &rptr_socketDats.dats[15], sizeof(stt_devOpreatDataPonit));
+							memcpy(&dev_dataPointTemp, &rptr_socketDats.dats[15], sizeof(stt_devOpreatDataPonit)); //数据结构化
 							switch(rptr_socketDats.dats[8]){ //帧命令
 
 								case DTMODEKEEPACESS_FRAMECMD_ASR:{
@@ -951,182 +954,208 @@ socketsDataTransProcess_task(void *pvParameters){
 
 										heartbeat_Cnt = heartbeat_Period; //有时效控制，强行提前定时通讯，即时回码
 
+										memcpy(&dev_agingCmd_rcvPassive, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold)); //本地被动时效操作缓存同步更新，用于原位回发
+
 //										printf_datsHtoA(">>>>>>>>agingCMD bytes:", &rptr_socketDats.dats[15], 6);
 
-										beeps_usrActive(3, 25, 1);
+										if(dataTrans_oncePword != rptr_socketDats.dats[rptr_socketDats.dats[1] - 2]){ //数据包单次传输可用口令检测 -口令相同则为重发，重发只回码，但不进行响应操作
 										
-										memcpy(&dev_agingCmd_rcvPassive, &dev_dataPointTemp.devAgingOpreat_agingReference, sizeof(stt_agingDataSet_bitHold)); //本地被动时效操作缓存同步更新，用于原位回发
-										
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_swOpreat){ //开关状态操作，需要时效
+											dataTrans_oncePword = rptr_socketDats.dats[rptr_socketDats.dats[1] - 2]; //本地口令更新，用于下次判断
+											frameDataOnceReserve_PASS = true;
+										}
 
-											if((status_actuatorRelay & 0x07) != dev_dataPointTemp.devStatus_Reference.statusRef_swStatus){ 
+										if(frameDataOnceReserve_PASS){
 
-												swCommand_fromUsr.objRelay = dev_dataPointTemp.devStatus_Reference.statusRef_swStatus;
-												swCommand_fromUsr.actMethod = relay_OnOff;
+											beeps_usrActive(3, 25, 1);
 
-												if((SWITCH_TYPE == SWITCH_TYPE_SWBIT1) || //多位开关才存在推送
-												   (SWITCH_TYPE == SWITCH_TYPE_SWBIT2) ||
-												   (SWITCH_TYPE == SWITCH_TYPE_SWBIT3)){
-
-														devActionPush_IF.push_IF = 1; //推送使能
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_swOpreat){ //开关状态操作，需要时效
+	
+												if((status_actuatorRelay & 0x07) != dev_dataPointTemp.devStatus_Reference.statusRef_swStatus){ 
+	
+													swCommand_fromUsr.objRelay = dev_dataPointTemp.devStatus_Reference.statusRef_swStatus;
+													swCommand_fromUsr.actMethod = relay_OnOff;
+													if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+													else
+													if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
+													
+													if((SWITCH_TYPE == SWITCH_TYPE_SWBIT1) || //多位开关才存在立即推送
+													   (SWITCH_TYPE == SWITCH_TYPE_SWBIT2) ||
+													   (SWITCH_TYPE == SWITCH_TYPE_SWBIT3)){
+	
+															devActionPush_IF.push_IF = 1; //推送使能
+													}
+	
+													os_printf(">>>>>>>>relayStatus reales:%02X, currentVal:%02X.\n", (int)status_actuatorRelay & 0x07, (int)dev_dataPointTemp.devStatus_Reference.statusRef_swStatus);
 												}
-
-												os_printf(">>>>>>>>relayStatus reales:%02X, currentVal:%02X.\n", (int)status_actuatorRelay & 0x07, (int)dev_dataPointTemp.devStatus_Reference.statusRef_swStatus);
 											}
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_delaySetOpreat){ //延时设置操作，需要时效
-
-											if(dev_dataPointTemp.devData_delayer){ //延时时间大于0就是开启操作
-											
-												ifDelay_sw_running_FLAG |= (1 << 1); //延时标志更新，启动
-												delayPeriod_onoff		= dev_dataPointTemp.devData_delayer; //延时时间
-												delayUp_act 			= dev_dataPointTemp.devData_delayUpStatus; //延时到达时，开关响应状态
-												delayCnt_onoff			= 0; //延时计数清零
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_delaySetOpreat){ //延时设置操作，需要时效
+	
+												if(dev_dataPointTemp.devData_delayer){ //延时时间大于0就是开启操作
 												
-											}else{ //否则为关闭操作
-
-												ifDelay_sw_running_FLAG &= ~(1 << 0); //延时标志更新，关闭
-												delayPeriod_onoff		= 0; 
-												delayCnt_onoff			= 0; 
+													ifDelay_sw_running_FLAG |= (1 << 1); //延时标志更新，启动
+													delayPeriod_onoff		= dev_dataPointTemp.devData_delayer; //延时时间
+													delayUp_act 			= dev_dataPointTemp.devData_delayUpStatus; //延时到达时，开关响应状态
+													delayCnt_onoff			= 0; //延时计数清零
+													
+												}else{ //否则为关闭操作
+	
+													ifDelay_sw_running_FLAG &= ~(1 << 0); //延时标志更新，关闭
+													delayPeriod_onoff		= 0; 
+													delayCnt_onoff			= 0; 
+												}
+	
+												os_printf(">>>>>>>>delayPeriod:[%d], delayUpAct:[%02X].\n", (int)delayPeriod_onoff, (int)delayUp_act);
 											}
-
-											os_printf(">>>>>>>>delayPeriod:[%d], delayUpAct:[%02X].\n", (int)delayPeriod_onoff, (int)delayUp_act);
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_devResetOpreat){ //恢复出厂重启操作，需要时效
-
-											local_ftyRecover_standbyFLG = 1; //恢复出厂预动作标志置位，先做就绪态，等待时效标志清零后进行实际动作
-
-											os_printf(">>>>>>>>factory recover standBy!.\n");
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_devLock){  //设备上锁设置操作，需要时效
-
-											if(dev_dataPointTemp.devStatus_Reference.statusRef_devLock){ //数据放在状态里
-											
-												datsSave_Temp.dev_lockIF = deviceLock_flag = 1; //运行缓存及本地存储更新
-												
-											}else{
-											
-												datsSave_Temp.dev_lockIF = deviceLock_flag = 0; //运行缓存及本地存储更新
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_devResetOpreat){ //恢复出厂重启操作，需要时效
+	
+												local_ftyRecover_standbyFLG = 1; //恢复出厂预动作标志置位，先做就绪态，等待时效标志清零后进行实际动作
+	
+												os_printf(">>>>>>>>factory recover standBy!.\n");
 											}
-											devParam_flashDataSave(obj_dev_lockIF, datsSave_Temp); //本地存储动作执行
-
-											os_printf(">>>>>>>>agingCmd devLock coming, lockIf:[%d].\n", (int)dev_dataPointTemp.devStatus_Reference.statusRef_devLock);
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_timerSetOpreat){  //定时设置操作，需要时效
-
-											for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){ //运行缓存更新
-											
-												if(dev_dataPointTemp.devData_timer[loop * 3] == 0x80){	/*一次性定时判断*///周占位为空而定时器被打开，说明是一次性
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_devLock){  //设备上锁设置操作，需要时效
+	
+												if(dev_dataPointTemp.devStatus_Reference.statusRef_devLock){ //数据放在状态里
 												
-													swTim_onShoot_FLAG	|= (1 << loop); //一次标志开启
-													dev_dataPointTemp.devData_timer[loop * 3] |= (1 << (systemTime_current.time_Week - 1)); //强行进行当前周占位，当次执行完毕后清除
+													datsSave_Temp.dev_lockIF = deviceLock_flag = 1; //运行缓存及本地存储更新
 													
 												}else{
-
-													swTim_onShoot_FLAG	&= ~(1 << loop); //一次标志关闭
-												}
-											}
-											memcpy(datsSave_Temp.swTimer_Tab, dev_dataPointTemp.devData_timer, 8 * 3); //本地存储更新
-											devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //本地存储动作执行
-											
-											datsTiming_getRealse(); //本地运行数据更新
-
-											os_printf(">>>>>>>>agingCmd timer coming, dataTab1:[%02X-%02X-%02X].\n", (int)dev_dataPointTemp.devData_timer[0],
-																													 (int)dev_dataPointTemp.devData_timer[1],
-																													 (int)dev_dataPointTemp.devData_timer[2]);
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_greenModeSetOpreat){  //绿色模式设置操作，需要时效
-
-											datsSave_Temp.swDelay_periodCloseLoop = dev_dataPointTemp.devData_greenMode; //本地存储更新
-											(dev_dataPointTemp.devData_greenMode)?(ifDelay_sw_running_FLAG |= (1 << 0)):(ifDelay_sw_running_FLAG &= ~(1 << 0)); //运行缓存更新
-											delayPeriod_closeLoop = dev_dataPointTemp.devData_greenMode;
-											devParam_flashDataSave(obj_swDelay_periodCloseLoop, datsSave_Temp); //本地存储动作执行
-
-											os_printf(">>>>>>>>agingCmd greenMode coming, timeSet:%d.\n", dev_dataPointTemp.devData_greenMode);
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_nightModeSetOpreat){  //夜间模式设置操作，需要时效
-
-											u8 dataTemp[3 * 2] = {0};
-											
-											(dev_dataPointTemp.devData_nightMode[0])?(dataTemp[0] |= 0x7f):(dataTemp[0] &= ~0x7f);
-											(dev_dataPointTemp.devData_nightMode[1])?(dataTemp[0] |= 0x80):(dataTemp[0] &= ~0x80);
-											dataTemp[1] = dev_dataPointTemp.devData_nightMode[2]; //下标2， 低5位， 时
-											dataTemp[2] = dev_dataPointTemp.devData_nightMode[3]; //下标3， 全8位， 分
-											dataTemp[4] = dev_dataPointTemp.devData_nightMode[4]; //下标4， 低5位， 时
-											dataTemp[5] = dev_dataPointTemp.devData_nightMode[5]; //下标5， 全8位，	分
-											
-											memcpy(datsSave_Temp.devNightModeTimer_Tab, dataTemp, 3 * 2); //本地存储更新
-											devParam_flashDataSave(obj_devNightModeTimer_Tab, datsSave_Temp); //本地存储动作执
-											vTaskDelay(2);
-
-											datsTiming_getRealse(); //本地运行数据更新
-
-											os_printf(">>>>>>>>agingCmd nightMode coming.\n");
-
-//											printf_datsHtoA("btMode data download:", dev_dataPointTemp.devData_nightMode, 6);
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_bkLightSetOpreat){  //背光灯设置操作，需要时效
-
-											datsSave_Temp.bkColor_swON = tipsInsert_swLedBKG_ON	= dev_dataPointTemp.devData_bkLight[0]; //运行缓存及本地存储更新
-											datsSave_Temp.bkColor_swOFF = tipsInsert_swLedBKG_OFF = dev_dataPointTemp.devData_bkLight[1]; //运行缓存及本地存储更新
-											devParam_flashDataSave(obj_bkColor_swON, datsSave_Temp); //本地存储动作执行
-											devParam_flashDataSave(obj_bkColor_swOFF, datsSave_Temp); //本地存储动作执行
-
-											os_printf(">>>>>>>>agingCmd bkLight coming, on-Isrt:%02d, off-Isrt:%02d.\n", dev_dataPointTemp.devData_bkLight[0], dev_dataPointTemp.devData_bkLight[1]);
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_horsingLight){  //跑马灯设置操作，需要时效
-
-											os_printf(">>>>>>>>agingCmd horsingLight coming, opreatData:%02X.\n", (int)dev_dataPointTemp.devStatus_Reference.statusRef_horsingLight);
-											ifHorsingLight_running_FLAG = dev_dataPointTemp.devStatus_Reference.statusRef_horsingLight;
-											if(ifHorsingLight_running_FLAG)counter_ifTipsFree = 0;
-											else tips_statusChangeToNormal(); //tips立即恢复
-										}
-
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat){ //开关位互控绑定设置操作，需要时效
-
-											u8 loop = 0;
-											
-											for(loop = 0; loop < 3; loop ++){
-											
-												if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat & (1 << loop)){
 												
-													CTRLEATHER_PORT[loop] = dev_dataPointTemp.devData_switchBitBind[loop]; //本地运行缓存更新
+													datsSave_Temp.dev_lockIF = deviceLock_flag = 0; //运行缓存及本地存储更新
 												}
+												devParam_flashDataSave(obj_dev_lockIF, datsSave_Temp); //本地存储动作执行
+	
+												os_printf(">>>>>>>>agingCmd devLock coming, lockIf:[%d].\n", (int)dev_dataPointTemp.devStatus_Reference.statusRef_devLock);
 											}
-											
-											memcpy(datsSave_Temp.port_ctrlEachother, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER); //本地存储更新
-											devParam_flashDataSave(obj_port_ctrlEachother, datsSave_Temp); //本地存储动作执行
-											enum_zigbFunMsg mptr_zigbFunRm = msgFun_portCtrlEachoRegister; //即刻注册互控端口
-											xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_timerSetOpreat){  //定时设置操作，需要时效
+	
+												for(loop = 0; loop < TIMEER_TABLENGTH; loop ++){ //运行缓存更新
+												
+													if(dev_dataPointTemp.devData_timer[loop * 3] == 0x80){	/*一次性定时判断*///周占位为空而定时器被打开，说明是一次性
+													
+														swTim_onShoot_FLAG	|= (1 << loop); //一次标志开启
+														dev_dataPointTemp.devData_timer[loop * 3] |= (1 << (systemTime_current.time_Week - 1)); //强行进行当前周占位，当次执行完毕后清除
+														
+													}else{
+	
+														swTim_onShoot_FLAG	&= ~(1 << loop); //一次标志关闭
+													}
+												}
+												memcpy(datsSave_Temp.swTimer_Tab, dev_dataPointTemp.devData_timer, 8 * 3); //本地存储更新
+												devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //本地存储动作执行
+												
+												datsTiming_getRealse(); //本地运行数据更新
+	
+												os_printf(">>>>>>>>agingCmd timer coming, dataTab1:[%02X-%02X-%02X].\n", (int)dev_dataPointTemp.devData_timer[0],
+																														 (int)dev_dataPointTemp.devData_timer[1],
+																														 (int)dev_dataPointTemp.devData_timer[2]);
+											}
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_greenModeSetOpreat){  //绿色模式设置操作，需要时效
+	
+												datsSave_Temp.swDelay_periodCloseLoop = dev_dataPointTemp.devData_greenMode; //本地存储更新
+												(dev_dataPointTemp.devData_greenMode)?(ifDelay_sw_running_FLAG |= (1 << 0)):(ifDelay_sw_running_FLAG &= ~(1 << 0)); //运行缓存更新
+												delayPeriod_closeLoop = dev_dataPointTemp.devData_greenMode;
+												devParam_flashDataSave(obj_swDelay_periodCloseLoop, datsSave_Temp); //本地存储动作执行
+	
+												os_printf(">>>>>>>>agingCmd greenMode coming, timeSet:%d.\n", dev_dataPointTemp.devData_greenMode);
+											}
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_nightModeSetOpreat){  //夜间模式设置操作，需要时效
+	
+												u8 dataTemp[3 * 2] = {0};
+												
+												(dev_dataPointTemp.devData_nightMode[0])?(dataTemp[0] |= 0x7f):(dataTemp[0] &= ~0x7f);
+												(dev_dataPointTemp.devData_nightMode[1])?(dataTemp[0] |= 0x80):(dataTemp[0] &= ~0x80);
+												dataTemp[1] = dev_dataPointTemp.devData_nightMode[2]; //下标2， 低5位， 时
+												dataTemp[2] = dev_dataPointTemp.devData_nightMode[3]; //下标3， 全8位， 分
+												dataTemp[4] = dev_dataPointTemp.devData_nightMode[4]; //下标4， 低5位， 时
+												dataTemp[5] = dev_dataPointTemp.devData_nightMode[5]; //下标5， 全8位，	分
+												
+												memcpy(datsSave_Temp.devNightModeTimer_Tab, dataTemp, 3 * 2); //本地存储更新
+												devParam_flashDataSave(obj_devNightModeTimer_Tab, datsSave_Temp); //本地存储动作执
+												vTaskDelay(2);
+	
+												datsTiming_getRealse(); //本地运行数据更新
+	
+												os_printf(">>>>>>>>agingCmd nightMode coming.\n");
+	
+	//											printf_datsHtoA("btMode data download:", dev_dataPointTemp.devData_nightMode, 6);
+											}
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_bkLightSetOpreat){	//背光灯设置操作，需要时效
 
-											os_printf(">>>>>>>>agingCmd switchBindSet coming, opreatBitHold:%02X bindData:%02X %02X %02X.\n", (int)dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat,
-																																			  (int)dev_dataPointTemp.devData_switchBitBind[0], 
-																																			  (int)dev_dataPointTemp.devData_switchBitBind[1], 
-																																			  (int)dev_dataPointTemp.devData_switchBitBind[2]);
-										}
+												memcpy(&devBackgroundLight_param, &(dev_dataPointTemp.devData_bkLight[0]), sizeof(bkLightColorInsert_paramAttr)); //运行缓存更新
+												memcpy(&datsSave_Temp.param_bkLightColorInsert, &devBackgroundLight_param, sizeof(bkLightColorInsert_paramAttr)); //本地存储更新
 
-										if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_curtainOpPeriodSetOpreat){ //窗帘轨道时间设置操作，需要时效
+												os_printf(">>>>>>>>agingCmd bkLight coming, on-Isrt:%02d, off-Isrt:%02d.\n", dev_dataPointTemp.devData_bkLight[0], dev_dataPointTemp.devData_bkLight[1]);
+											}
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_horsingLight){	//跑马灯设置操作，需要时效
+	
+												os_printf(">>>>>>>>agingCmd horsingLight coming, opreatData:%02X.\n", (int)dev_dataPointTemp.devStatus_Reference.statusRef_horsingLight);
+												ifHorsingLight_running_FLAG = dev_dataPointTemp.devStatus_Reference.statusRef_horsingLight;
+												if(ifHorsingLight_running_FLAG)counter_ifTipsFree = 0;
+												else tips_statusChangeToNormal(); //tips立即恢复
+											}
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat){ //开关位互控绑定设置操作，需要时效
+	
+												u8 loop = 0;
+												
+												for(loop = 0; loop < 3; loop ++){
+												
+													if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat & (1 << loop)){
+													
+														CTRLEATHER_PORT[loop] = dev_dataPointTemp.devData_switchBitBind[loop]; //本地运行缓存更新
+													}
+												}
+												
+												memcpy(datsSave_Temp.port_ctrlEachother, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER); //本地存储更新
+												devParam_flashDataSave(obj_port_ctrlEachother, datsSave_Temp); //本地存储动作执行
+												enum_zigbFunMsg mptr_zigbFunRm = msgFun_portCtrlEachoRegister; //即刻注册互控端口
+												xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
+	
+												os_printf(">>>>>>>>agingCmd switchBindSet coming, opreatBitHold:%02X bindData:%02X %02X %02X.\n", (int)dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_switchBitBindSetOpreat,
+																																				  (int)dev_dataPointTemp.devData_switchBitBind[0], 
+																																				  (int)dev_dataPointTemp.devData_switchBitBind[1], 
+																																				  (int)dev_dataPointTemp.devData_switchBitBind[2]);
+											}
 
-											curtainAct_Param.act_period = dev_dataPointTemp.union_devParam.curtain_param.orbital_Period; //本地运行缓存更新
-											datsSave_Temp.devCurtain_orbitalPeriod = dev_dataPointTemp.union_devParam.curtain_param.orbital_Period; //本地存储更新
-											devParam_flashDataSave(obi_devCurtainOrbitalPeriod, datsSave_Temp); //本地存储动作执行
-											
-											if(!curtainAct_Param.act_period)curtainAct_Param.act_period = 240;
-											else
-											if(curtainAct_Param.act_period == 0xff)curtainAct_Param.act_period = 10;
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_timeZoneReset){
 
-											os_printf(">>>>>>>>agingCmd curtainOrbitalSet coming, valSet:%d .\n", (int)dev_dataPointTemp.union_devParam.curtain_param.orbital_Period);
+												sysTimeZone_H = rptr_socketDats.dats[13]; //时区缓存更新
+												sysTimeZone_M = rptr_socketDats.dats[14];
+
+												datsSave_Temp.timeZone_H = rptr_socketDats.dats[13]; //时区本地存储更新
+												datsSave_Temp.timeZone_M = rptr_socketDats.dats[14];
+												devParam_flashDataSave(obj_timeZone_H, datsSave_Temp);
+												devParam_flashDataSave(obj_timeZone_M, datsSave_Temp);
+
+												os_printf(">>>>>>>>agingCmd timeZone reset coming, data:H[%d]-M[%d].\n", rptr_socketDats.dats[13], rptr_socketDats.dats[14]);
+											}
+	
+											if(dev_dataPointTemp.devAgingOpreat_agingReference.agingCmd_curtainOpPeriodSetOpreat){ //窗帘轨道时间设置操作，需要时效
+
+												os_printf(">>>>>>>>agingCmd curtainOrbitalSet coming, valSet:%d .\n", (int)dev_dataPointTemp.union_devParam.curtain_param.orbital_Period);
+
+												//数据限值处理以及缓存更新
+												curtainAct_Param.act_period = dev_dataPointTemp.union_devParam.curtain_param.orbital_Period;
+												if(curtainAct_Param.act_period == 0xff)curtainAct_Param.act_period = CURTAIN_ORBITAL_PERIOD_INITTIME;
+												datsSave_Temp.devCurtain_orbitalPeriod = dev_dataPointTemp.union_devParam.curtain_param.orbital_Period; //本地存储更新
+												devParam_flashDataSave(obj_devCurtainOrbitalPeriod, datsSave_Temp); //本地存储动作执行
+
+												//每次进行窗帘轨道时间设置时，都进行一次全关矫正操作
+												swCommand_fromUsr.objRelay = 1; //关操作
+												swCommand_fromUsr.actMethod = relay_OnOff;
+											}
 										}
 									}
-									else{
+									else
+									{
 
 										memset(&dev_agingCmd_rcvPassive, 0, sizeof(stt_agingDataSet_bitHold));
 										if(local_ftyRecover_standbyFLG){
@@ -1388,7 +1417,7 @@ socketsDataTransProcess_task(void *pvParameters){
 	vTaskDelete(NULL);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 network_mainThreadStart(void){
 
 	portBASE_TYPE xReturn = pdFAIL;
@@ -1400,7 +1429,7 @@ network_mainThreadStart(void){
 	os_timer_setfn(&timer_heartBeatKeep, (os_timer_func_t *)timer_heartBeatKeep_funCB, NULL);
 	os_timer_arm(&timer_heartBeatKeep, timer_heartBeatKeep_Period, true);
 	
-	xReturn = xTaskCreate(socketsDataTransProcess_task, "Process_Sockets", 1024, (void *)NULL, 4, &pxTaskHandle_threadNWK);
+	xReturn = xTaskCreate(socketsDataTransProcess_task, "Process_Sockets", 1024, (void *)NULL, 5, &pxTaskHandle_threadNWK);
 
 	os_printf("\npxTaskHandle_threadNWK is %d\n", pxTaskHandle_threadNWK);
 }

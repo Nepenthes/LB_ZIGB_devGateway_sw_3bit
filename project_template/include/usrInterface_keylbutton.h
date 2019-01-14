@@ -23,6 +23,12 @@ typedef enum{
 	press_LongB,
 }keyCfrm_Type;
 
+typedef struct{
+
+	u8 param_combinationFunPreTrig_standBy_FLG:1; //预触发标志
+	u8 param_combinationFunPreTrig_standBy_keyVal:7; //预触发按键键值缓存
+}param_combinationFunPreTrig;
+
 typedef void funKey_Callback(void);
 
 extern u8 	timeCounter_smartConfig_start;

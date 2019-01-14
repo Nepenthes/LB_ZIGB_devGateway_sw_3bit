@@ -26,7 +26,7 @@ ip_addr_t tcp_remoteB_serverIP;
 LOCAL bool tcp_remoteB_connFLG = false;
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteBCallback_dataRcv(void *arg, char *pdata, unsigned short len){
 
 	remot_info *pcon_info = NULL;
@@ -40,13 +40,13 @@ myTCP_remoteBCallback_dataRcv(void *arg, char *pdata, unsigned short len){
 	
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteBCallback_dataSend(void *arg){
 
 	os_printf("[Tips_socketTCP_B]: data sent successfully!!!\n");
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteBCallback_disConnect(void *arg){
 
 	tcp_remoteB_connFLG = false;
@@ -55,7 +55,7 @@ myTCP_remoteBCallback_disConnect(void *arg){
 //	os_printf("[Tips_socketTCP_B]:TCP reconnect Result is :%d\n", espconn_connect(&infoTemp_connTCP_remoteB));
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteBCallback_Connect(void *arg){
 
 	const u8 *dats_Test = "HEAD /sm/image/firewareNew_test.bin HTTP/1.1\r\nAccept:*/*\r\nHost:www.lanbonserver.com\r\nConnection:Keep-Alive\r\n\r\n\0";
@@ -73,7 +73,7 @@ myTCP_remoteBCallback_Connect(void *arg){
 //	espconn_send(&infoTemp_connTCP_remoteB, (u8 *)dats_Test, strlen(dats_Test));
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteBCallback_reConnect(void *arg, sint8 err){
 
 	tcp_remoteB_connFLG = false;
@@ -119,7 +119,7 @@ myTCP_remoteBCallback_reConnect(void *arg, sint8 err){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_DNSfound_funCB(const char *name, ip_addr_t *ipaddr, void *arg){
 
 	struct espconn *pespconn = (struct espconn*)arg;
@@ -150,7 +150,7 @@ myTCP_DNSfound_funCB(const char *name, ip_addr_t *ipaddr, void *arg){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 tcpConnectDetect_B_funCB(void *para){
 
 	const uint8 myServer_IPaddr[4] = {10,0,0,218};
@@ -194,7 +194,7 @@ tcpConnectDetect_B_funCB(void *para){
 	}
 }
 
-STATUS ICACHE_FLASH_ATTR
+STATUS 
 TCPremoteB_datsSend(u8 dats[], u16 datsLen){
 
 	if(tcp_remoteB_connFLG){
@@ -208,7 +208,7 @@ TCPremoteB_datsSend(u8 dats[], u16 datsLen){
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 tcpRemote_B_connectStart(void){
 
 	os_timer_disarm(&timer_tcpConnectDetect_B);

@@ -3,9 +3,8 @@
 
 #include "esp_common.h"
 #include "freertos/queue.h"
-
 #include "datsProcess_uartZigbee.h"
-#include "datsManage.h"
+#include "usrInterface_Tips.h"
 
 #define WIFIMODE_STA			1
 #define WIFIMODE_AP				2
@@ -34,14 +33,23 @@
 #define SWITCH_TYPE_SWBIT3	 	(0xA0 + 0x03) //设备类型，三位开关
 #define SWITCH_TYPE_CURTAIN		(0xA0 + 0x08) //设备类型，窗帘
 
+#define SWITCH_TYPE_dIMMER		(0x38 + 0x04) //设备类型，调光
+#define SWITCH_TYPE_FANS		(0x38 + 0x05) //设备类型，风扇
+#define SWITCH_TYPE_INFRARED	(0x38 + 0x06) //设备类型，红外转发器
+#define SWITCH_TYPE_SOCKETS		(0x38 + 0x07) //设备类型，插座
+#define	SWITCH_TYPE_SCENARIO	(0x38 + 0x09) //设备类型，场景开关
+#define SWITCH_TYPE_HEATER		(0x38 + 0x1F) //设备类型，热水器
+
 #define SPI_FLASH_SEC_SIZE      4096
-#define DATS_LOCATION_START		0x3F9	//32Mbit
+#define DATS_LOCATION_START		0x202		//拓荒区
+//#define DATS_LOCATION_START		0x3F9	//32Mbit
 //#define DATS_LOCATION_START		0x1F9	//16Mbit
 //#define DATS_LOCATION_START		0x0F9	//08Mbit
 
 #define FLASH_USROPREATION_ADDR_OFFSET_DEVLOCALINFO_RECORD		0 //记录单元扇区地址偏移量：本地设备信息数据
 #define FLASH_USROPREATION_ADDR_OFFSET_SLAVEDEVLIST_RECORD		1 //记录单元扇区地址偏移量：子设备列表信息数据
 #define FLASH_USROPREATION_ADDR_OFFSET_SPERELAYSTATUS_RECORD	2 //记录单元扇区地址偏移量：特殊独立继电器实时状态信息数据
+#define FLASH_USROPREATION_ADDR_OFFSET_SCENARIODATA_RECORD		17//记录单元扇区地址偏移量：场景数据本地存储
 
 #define RELAYSTATUS_REALYTIME_ENABLEIF		0 //是否将继电器状态进行独立记录 <在开关记忆使能情况下，开启此功能可以消除触摸时闪烁>
 
@@ -66,6 +74,20 @@ typedef struct{
 
 typedef struct{
 
+	enum{
+
+		scenarioOpt_enable = 0xBA,
+		scenarioOpt_disable,
+
+	}scenarioReserve_opt:8; //8bit限位
+	
+	u8 scenarioDataSave_InsertNum; //存储索引序号
+    scenarioOprateUnit_Attr scenarioOprate_Unit[zigB_ScenarioCtrlDataTransASY_QbuffLen]; //集群节点MAC
+	u8 devNode_num; //集群节点数目
+}stt_scenarioDataLocalSave;
+
+typedef struct{
+
 	u8  FLG_factory_IF;
 
 	u8 	rlyStaute_flg:3;	//三位继电器 状态
@@ -79,7 +101,8 @@ typedef struct{
 
 	u8 	serverIP_default[4];	//默认服务器IP
 
-	u8	devCurtain_orbitalPeriod;	//开关类型为开关时，轨道周期时间
+	u8	devCurtain_orbitalPeriod;	//开关类型为窗帘开关时，轨道周期时间
+	u8	devCurtain_orbitalCounter;	//开关类型为窗帘开关时，当前轨道位置计时变量
 
 	u8  swTimer_Tab[3 * 8];	//定时表
 	u8  swDelay_flg; //延时及绿色模式标志
@@ -90,8 +113,7 @@ typedef struct{
 
 	u16 panID_default; //PANID
 
-	u8 	bkColor_swON; //色值索引，开
-	u8 	bkColor_swOFF; //色值索引，关
+	bkLightColorInsert_paramAttr param_bkLightColorInsert;
 }stt_usrDats_privateSave;
 
 #define ZIGBDEV_UNIT_MACLEN	5
@@ -125,7 +147,8 @@ typedef enum{
 	obj_timeZone_H,
 	obj_timeZone_M,
 
-	obi_devCurtainOrbitalPeriod,
+	obj_devCurtainOrbitalPeriod,
+	obj_devCurtainOrbitalCounter,
 
 	obj_swTimer_Tab,
 	obj_swDelay_flg,
@@ -136,9 +159,7 @@ typedef enum{
 	
 	obj_panID_default,
 
-	obj_bkColor_swON,
-	obj_bkColor_swOFF,
-	
+	obj_paramBKColorInsert,
 }devDatsSave_Obj;
 
 typedef enum{
@@ -195,7 +216,9 @@ typedef struct agingDataSet_bitHold{ //使用指针强转时注意，agingCmd_sw
 	u8 agingCmd_horsingLight:1; //时效_跑马灯设置 -bit0
 	u8 agingCmd_switchBitBindSetOpreat:3; //时效_开关互控组号设置_针对三个开关位进行设置 -bit1...bit3
 	u8 agingCmd_curtainOpPeriodSetOpreat:1; //时效_针对窗帘轨道时间设置 -bit4
-	u8 statusRef_bitReserve:3; //时效_bit保留 -bit5...bit7
+	u8 agingCmd_infrareOpreat:1; //时效_针对针对红外转发器操作 -bit5
+	u8 agingCmd_scenarioSwOpreat:1; //时效_针对场景开关操作 -bit6
+	u8 agingCmd_timeZoneReset:1; //时效_时区校准操作 -bit7
 	
 	u8 agingCmd_byteReserve[4];	//4字节占位保留
 	
@@ -236,23 +259,42 @@ typedef struct dataPonit{
 	
 		struct funParam_curtain{ //窗帘
 		
-			u8 orbital_Period;
+			u8 orbital_Period; //轨道周期时间
 			
 		}curtain_param;
 		
 		struct funParam_socket{ //插座
 		
-			u8 data_eleConsum[3];
-			u8 data_elePower[4];
-			u8 data_corTime;
+			u8 data_elePower[4]; //功率数据
+			u8 data_eleConsum[3]; //电量数据
+			u8 data_corTime; //当前电量对应小时段
 			
-			u8 dataDebug_powerFreq[4]; //debug数据-power频率
-			
+			u8 dataDebug_powerFreq[4]; //debug数据	-power的检测频率
+	
 		}socket_param;
+
+		struct funParam_infrared{
 		
+			u8 opreatAct; //操作指令
+			u8 opreatInsert; //对应操作的红外指令序号
+			u8 currentTemperature_integerPrt; //温度数据 -整数部分
+			u8 currentTemperature_decimalPrt; //温度数据 -小数部分
+			u8 currentOpreatReserveNum; //当前操作区分随机数口令 -用于区分是操作截止还是重发
+
+			u8 irTimeAct_timeUpNum[8]; //八段红外定时响应指令号
+			
+		}infrared_param;
+
+		struct funParam_scenarioSw{
+		
+			u8 scenarioOpreatCmd; //操作命令
+			u8 scenarioKeyBind[3]; //对应按键绑定的场景号
+			
+		}scenarioSw_param;
+
 	}union_devParam;
 
-}stt_devOpreatDataPonit; //standard_length = 49Bytes
+}stt_devOpreatDataPonit; //standard_length = 49Bytes + class_extension
 /*=======================↑↑↑定时询访机制专用数据结构↑↑↑=============================*/
 
 extern const u8 debugLogOut_targetMAC[5];
@@ -285,10 +327,14 @@ void devLockIF_Reales(void);
 u8 switchTypeReserve_GET(void);
 
 void printf_datsHtoA(const u8 *TipsHead, u8 *dats , u8 datsLen);
+void printf_datsHtoB(const u8 *TipsHead, u8 *dats , u8 datsLen);
+
 void devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSave_Temp);
 void devParam_SlaveZigbDevListInfoSave(stt_usrDats_zigbDevListInfo datsSave_Temp);
+void devParam_scenarioDataLocalSave(stt_scenarioDataLocalSave *datsSave_Temp);
 stt_usrDats_privateSave *devParam_flashDataRead(void);	//谨记读取完毕后释放内存
 stt_usrDats_zigbDevListInfo *devParam_SlaveZigbDevListInfoRead(void);	//谨记读取完毕后释放内存
+stt_scenarioDataLocalSave *devParam_scenarioDataLocalRead(u8 scenario_insertNum);	//谨记读取完毕后释放内存
 void devData_recoverFactory(void);
 void devFactoryRecord_Opreat(void);
 void devParamDtaaSave_relayStatusRealTime(u8 currentRelayStatus);

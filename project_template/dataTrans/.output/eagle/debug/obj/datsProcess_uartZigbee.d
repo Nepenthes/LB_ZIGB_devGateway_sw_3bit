@@ -80,8 +80,8 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/pwm.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/freertos/queue.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/driver_lib/include/uart.h \
- ../include/datsProcess_socketsNetwork.h ../include/usrParsingMethod.h \
- ../include/datsManage.h ../include/datsProcess_uartZigbee.h \
- ../include/datsManage.h ../include/bsp_Hardware.h \
- ../include/timer_Activing.h ../include/hwPeripherial_Actuator.h \
- ../include/bsp_Hardware.h
+ ../include/datsProcess_socketsNetwork.h ../include/datsManage.h \
+ ../include/datsProcess_uartZigbee.h ../include/usrInterface_Tips.h \
+ ../include/usrParsingMethod.h ../include/datsManage.h \
+ ../include/bsp_Hardware.h ../include/timer_Activing.h \
+ ../include/hwPeripherial_Actuator.h ../include/bsp_Hardware.h

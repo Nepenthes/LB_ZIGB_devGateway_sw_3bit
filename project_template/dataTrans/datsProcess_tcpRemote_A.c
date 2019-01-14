@@ -28,7 +28,7 @@ ip_addr_t tcp_remoteA_serverIP;
 LOCAL bool tcp_remoteA_connFLG = false;
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteACallback_dataRcv(void *arg, char *pdata, unsigned short len){
 
 	bool dataCorrect_FLG = false;
@@ -216,13 +216,13 @@ myTCP_remoteACallback_dataRcv(void *arg, char *pdata, unsigned short len){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteACallback_dataSend(void *arg){
 
 	os_printf("[Tips_socketTCP_A]: data sent cmp.\n");
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteACallback_disConnect(void *arg){
 
 	tcp_remoteA_connFLG = false;
@@ -230,7 +230,7 @@ myTCP_remoteACallback_disConnect(void *arg){
 	os_printf("[Tips_socketTCP_A]: disConnect from server!!!\n");
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteACallback_Connect(void *arg){
 
 	struct espconn *pespconn = arg;
@@ -246,7 +246,7 @@ myTCP_remoteACallback_Connect(void *arg){
 	espconn_send(&infoTemp_connTCP_remoteA, "[DBG_DATA]: hellow world!!!\n", 26);
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_remoteACallback_reConnect(void *arg, sint8 err){
 
 	tcp_remoteA_connFLG = false;
@@ -293,7 +293,7 @@ myTCP_remoteACallback_reConnect(void *arg, sint8 err){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myTCP_DNSfound_funCB(const char *name, ip_addr_t *ipaddr, void *arg){
 
 	struct espconn *pespconn = (struct espconn*)arg;
@@ -324,7 +324,7 @@ myTCP_DNSfound_funCB(const char *name, ip_addr_t *ipaddr, void *arg){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 tcpConnectDetect_A_funCB(void *para){
 
 	const uint8 myServer_IPaddr[4] = {10,0,0,218};
@@ -367,7 +367,7 @@ tcpConnectDetect_A_funCB(void *para){
 	}
 }
 
-STATUS ICACHE_FLASH_ATTR
+STATUS 
 TCPremoteA_datsSend(u8 dats[], u16 datsLen){
 
 	if(tcp_remoteA_connFLG){
@@ -381,7 +381,7 @@ TCPremoteA_datsSend(u8 dats[], u16 datsLen){
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 tcpRemote_A_connectStart(void){
 
 	os_timer_disarm(&timer_tcpConnectDetect_A);

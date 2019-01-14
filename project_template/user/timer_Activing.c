@@ -12,6 +12,9 @@
 #include "espressif/espconn.h"
 #include "espressif/airkiss.h"
 
+#include "datsProcess_uartZigbee.h"
+#include "datsProcess_socketsNetwork.h"
+
 #include "hwPeripherial_Actuator.h"
 #include "datsManage.h"
 #include "usrInterface_Tips.h"
@@ -46,9 +49,9 @@ LOCAL os_timer_t timer_sntpTimerAct;
 LOCAL xTaskHandle pxTaskHandle_threadtimActing;
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR timerFunCB_sntpTimerInit(void *para);
+LOCAL void  timerFunCB_sntpTimerInit(void *para);
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 devStnp_Init(void){
 
 	sntp_stop();
@@ -60,7 +63,7 @@ devStnp_Init(void){
 	vTaskDelay(1000 / portTICK_RATE_MS);
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 timerFunCB_sntpTimerAct(void *para){
 
 	static u8 timeLog_Cnt = 0;
@@ -88,10 +91,18 @@ timerFunCB_sntpTimerAct(void *para){
 			
 			}else{
 
-				nwkInternetOnline_IF = false;
+				const u8 sntp_timeGet_failureLimit = 6; //sntp时间获取失败次数限定
+				static u8 sntp_timeGet_failureCount = 0; //sntp时间获取失败次数记录
+
+				if(sntp_timeGet_failureCount < sntp_timeGet_failureLimit)sntp_timeGet_failureCount ++; //失败次数达到限定值则进行sntp重连，并重新进行网络在线检测
+				else{
+
+					sntp_timeGet_failureCount = 0;
+					nwkInternetOnline_IF = false;					
+				}
 			}
-			
-		}else{
+		}
+		else{
 
 			nwkInternetOnline_IF = false;
 		}
@@ -106,7 +117,7 @@ timerFunCB_sntpTimerAct(void *para){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 timerFunCB_sntpTimerInit(void *para){
 
 	struct ip_info ipConfig_info;
@@ -129,7 +140,7 @@ timerFunCB_sntpTimerInit(void *para){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 localSystime_logOut(void){
 
 	os_printf(	"\n>>===时间戳===<<\n    20%02d/%02d/%02d-W%01d\n        %02d:%02d:%02d\n timeZone_H:%02d.\n", 
@@ -143,22 +154,23 @@ localSystime_logOut(void){
 				(int)sysTimeZone_H);
 	
    os_printf("reserve heap : %d. \n", system_get_free_heap_size());
+   os_printf("zigbNwk current PANID : %d. \n", nwkZigb_currentPANID);
    os_printf("zigbNwk reserveNode num : %d. \n", zigbNwkReserveNodeNum_currentValue);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 localTimerPause_sntpTimerAct(void){
 
 	os_timer_disarm(&timer_sntpTimerAct);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 localTimerRecover_sntpTimerAct(void){
 
 	sntp_timerActThread_Start();
 }
 
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 weekend_judge(u8 weekNum, u8 HoldNum){
 
 	u8 loop;
@@ -175,7 +187,7 @@ weekend_judge(u8 weekNum, u8 HoldNum){
 	return false;
 }
 
-void ICACHE_FLASH_ATTR
+void 
 timeZone_Reales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
@@ -186,7 +198,7 @@ timeZone_Reales(void){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 datsTiming_getRealse(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
@@ -213,7 +225,7 @@ datsTiming_getRealse(void){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 datsDelayOP_getReales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
@@ -226,7 +238,7 @@ datsDelayOP_getReales(void){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 timActingProcess_task(void *pvParameters){
 
 	stt_usrDats_privateSave datsSave_Temp = {0};
@@ -382,7 +394,10 @@ timActingProcess_task(void *pvParameters){
 							swCommand_fromUsr.actMethod = relay_OnOff;
 							swCommand_fromUsr.objRelay = timDatsTemp_CalibrateTab[loop].Status_Act;
 							devStatus_pushIF = true; //开关状态数据推送
-							
+							dev_agingCmd_sndInitative.agingCmd_delaySetOpreat = 1;
+							if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+							else
+							if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
 						}
 						else
 						if(((u16)systemTime_current.time_Hour * 60 + (u16)systemTime_current.time_Minute) > //定时时刻核对，大于正确时刻标志清除
@@ -396,7 +411,7 @@ timActingProcess_task(void *pvParameters){
 							   datsRead_Temp = devParam_flashDataRead(); //定时表缓存更新
 							   memcpy(datsSave_Temp.swTimer_Tab, datsRead_Temp->swTimer_Tab, 3 * 4); 
 							   if(datsRead_Temp)os_free(datsRead_Temp);
-							   datsSave_Temp.swTimer_Tab[loop * 3] = 0; //定时表缓存局部清除
+							   datsSave_Temp.swTimer_Tab[loop * 3] = 0; //定时表缓存局部清除，只清除周占位，不清楚时间
 							   devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //存储数据更新
 							   datsTiming_getRealse(); //本地运行数据更新
 						   }
@@ -412,7 +427,7 @@ timActingProcess_task(void *pvParameters){
 	vTaskDelete(NULL);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 sntp_timerActThread_Start(void){
 
 	os_timer_disarm(&timer_sntpTimerAct);
@@ -420,7 +435,7 @@ sntp_timerActThread_Start(void){
 	os_timer_arm(&timer_sntpTimerAct, 1000, false);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 timActing_ThreadStart(void){
 
 	portBASE_TYPE xReturn = pdFAIL;

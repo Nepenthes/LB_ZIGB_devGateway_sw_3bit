@@ -65,9 +65,12 @@ extern xQueueHandle xMsgQ_devUpgrade;
 
 extern stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen];
 extern stt_dataScenarioReq localZigbASYDT_bufQueueScenarioReq[zigB_ScenarioCtrlDataTransASY_QbuffLen];
+
 extern u16 dtReqEx_counter;
 
 extern u8 internetRemoteServer_portSwitchPeriod;
+
+extern u8 zigbee_currentPanID_reslesCounter;
 
 extern bool zigbNodeDevDetectManage_runningFLG;
 
@@ -80,7 +83,7 @@ void somartConfig_complete(void);
 LOCAL void somartConfig_standBy(void);
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 uart1Init_Debug(void){
 
 	UART_WaitTxFifoEmpty(UART1);
@@ -98,7 +101,7 @@ uart1Init_Debug(void){
 	UART_SetPrintPort(UART1);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 smartconfig_done_tp(sc_status status, void *pdata)
 {
     switch(status) {
@@ -166,7 +169,7 @@ smartconfig_done_tp(sc_status status, void *pdata)
 	
 }
 
-void ICACHE_FLASH_ATTR
+void 
 devConnectAP_autoInit(char P_ssid[32], char P_password[64]){
 
 //	char ssid[32] = "LANBON_SHOWROOM";
@@ -194,7 +197,7 @@ devConnectAP_autoInit(char P_ssid[32], char P_password[64]){
 }
 
 /*测试线程*/
-void ICACHE_FLASH_ATTR
+void 
 myProcess_task(void *pvParameters)
 {
 
@@ -432,7 +435,7 @@ uint32 user_rf_cal_sector_set(void)
 }
 
 /*毫秒定时器*/
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 timerFunCB_usrReference(void *para){ 
 
 	const u8 period1s_usrTest = 40; //定时测试业务 计时周期
@@ -476,6 +479,9 @@ timerFunCB_usrReference(void *para){
 			xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
 		}
 
+		/*zigbee当前PANID读取周期计时计数*/
+		if(zigbee_currentPanID_reslesCounter)zigbee_currentPanID_reslesCounter --;
+
 		/*延时计时业务*///到点动作响应
 		if(ifDelay_sw_running_FLAG & (1 << 1)){
 		
@@ -489,7 +495,11 @@ timerFunCB_usrReference(void *para){
 				swCommand_fromUsr.actMethod = relay_OnOff; //动作响应
 				swCommand_fromUsr.objRelay = delayUp_act;
 				devStatus_pushIF = true; //开关状态数据推送
-
+				dev_agingCmd_sndInitative.agingCmd_delaySetOpreat = 1;
+				if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+				else
+				if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
+				
 				os_printf(">>>>>>>>delayAct opreation up.\n");
 			}
 		}	
@@ -505,6 +515,10 @@ timerFunCB_usrReference(void *para){
 				swCommand_fromUsr.actMethod = relay_OnOff; //动作响应
 				swCommand_fromUsr.objRelay = 0;
 				devStatus_pushIF = true; //开关状态数据推送
+				dev_agingCmd_sndInitative.agingCmd_delaySetOpreat = 1;
+				if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+				else
+				if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
 			}
 		}
 
@@ -559,27 +573,33 @@ timerFunCB_usrReference(void *para){
 				switch(curtainAct_Param.act){
 				
 					case cTact_open:{
-					
-						if(curtainAct_Param.act_counter < curtainAct_Param.act_period){
-							
-							if(counter5_200ms >= period5_200ms)curtainAct_Param.act_counter ++;
-							
-						}else{
 						
-							curtainAct_Param.act = cTact_stop;
+						if(curtainAct_Param.act_period){ //轨道周期时间非零时才进行有效轨道时间计时业务
+						
+							if(curtainAct_Param.act_counter < curtainAct_Param.act_period){
+							
+								if(counter5_200ms >= period5_200ms)curtainAct_Param.act_counter ++;
+								
+							}else{
+							
+								curtainAct_Param.act = cTact_stop;
+							}	
 						}
 						
 					}break;
 						
 					case cTact_close:{
-					
-						if(curtainAct_Param.act_counter > 0){
 						
-							if(counter5_200ms >= period5_200ms)curtainAct_Param.act_counter --;
+						if(curtainAct_Param.act_period){ //轨道周期时间非零时才进行有效轨道时间计时业务
+						
+							if(curtainAct_Param.act_counter > 0){
 							
-						}else{
-						
-							curtainAct_Param.act = cTact_stop;
+								if(counter5_200ms >= period5_200ms)curtainAct_Param.act_counter --;
+								
+							}else{
+							
+								curtainAct_Param.act = cTact_stop;
+							}						
 						}
 					
 					}break;
@@ -596,6 +616,7 @@ timerFunCB_usrReference(void *para){
 					}break;
 						
 					default:{}break;
+
 				}
 			}
 			
@@ -617,7 +638,7 @@ timerFunCB_usrReference(void *para){
 	if(dtReqEx_counter)dtReqEx_counter --;
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 somartConfig_standBy(void){ //smartConfig时中断所有定时器
 
 	os_timer_disarm(&timer_Test);
@@ -626,7 +647,7 @@ somartConfig_standBy(void){ //smartConfig时中断所有定时器
 	localTimerPause_sntpTimerAct();
 }
 
-void ICACHE_FLASH_ATTR
+void 
 somartConfig_complete(void){ //smartConfig结束时恢复所有被中断的定时器
 
 	os_timer_arm(&timer_Test, TIMERPERIOD_USRTEST_FUN, true);
@@ -635,7 +656,7 @@ somartConfig_complete(void){ //smartConfig结束时恢复所有被中断的定�
 	localTimerRecover_sntpTimerAct();
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 timerFunCB_Test(void *para){
 
 //	stt_usrDats_privateSave *dats_Temp = devParam_flashDataRead();;
@@ -684,7 +705,8 @@ void user_init(void)
 	curtainOrbitalPeriod_Reales(); //窗帘轨道周期更新
 	
 //	wifi_station_disconnect();
-	wifi_station_set_auto_connect(1); 
+	devConnectAP_autoInit("LANBON_DEVELOP002", "Lanbon22*#"); //调试时直接连wifi
+//	wifi_station_set_auto_connect(1); 
 
 	uart1Init_Debug();
 	uart0Init_datsTrans();

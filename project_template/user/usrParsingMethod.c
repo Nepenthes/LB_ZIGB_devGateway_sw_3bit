@@ -2,7 +2,7 @@
 
 #include "esp_common.h"
 
-void ICACHE_FLASH_ATTR
+void 
 *usr_memmem(void *start, unsigned char s_len, void *find, unsigned char f_len){
 
 	unsigned char len	= 0;
@@ -24,7 +24,7 @@ void ICACHE_FLASH_ATTR
 	return NULL;
 }
 
-int ICACHE_FLASH_ATTR
+int 
 usr_memloc(u8 str2[],u8 num_s2,u8 str1[],u8 num_s1){
 
 	int la = num_s1;
@@ -38,7 +38,7 @@ usr_memloc(u8 str2[],u8 num_s2,u8 str1[],u8 num_s1){
 	return -1;
 }
 
-int ICACHE_FLASH_ATTR
+int 
 usr_strloc(char *str2,char *str1){
 
 	int la = strlen(str1);
@@ -52,7 +52,7 @@ usr_strloc(char *str2,char *str1){
 	return -1;
 }
 
-float ICACHE_FLASH_ATTR
+float 
 bytesTo_float(u8 dat[4]){
 
 	const float decimal_prtCoefficient = 10000.0F;
@@ -66,7 +66,7 @@ bytesTo_float(u8 dat[4]){
 	return res;
 }
 
-int ICACHE_FLASH_ATTR
+int 
 ftoa(char *str, float num, int n){
 	
 	int 	sumI;

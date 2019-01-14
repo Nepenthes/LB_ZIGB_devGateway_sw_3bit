@@ -87,7 +87,9 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/lwip/lwip/netdb.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/espconn.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/airkiss.h \
+ ../include/datsProcess_uartZigbee.h \
+ ../include/datsProcess_socketsNetwork.h ../include/datsManage.h \
+ ../include/datsProcess_uartZigbee.h ../include/usrInterface_Tips.h \
  ../include/hwPeripherial_Actuator.h ../include/bsp_Hardware.h \
- ../include/datsManage.h ../include/datsProcess_uartZigbee.h \
  ../include/datsManage.h ../include/usrInterface_Tips.h \
  ../include/usrInterface_keylbutton.h

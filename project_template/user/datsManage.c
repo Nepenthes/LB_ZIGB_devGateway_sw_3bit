@@ -6,6 +6,8 @@
 
 #include "usrInterface_Tips.h"
 
+#include "hwPeripherial_Actuator.h"
+
 const u8 debugLogOut_targetMAC[5] = {0x20, 0x18, 0x12, 0x34, 0x56};
 const u8 serverRemote_IP_Lanbon[4] = {10, 0, 0, 224};
 //const u8 serverRemote_IP_Lanbon[4] = {47,52,5,108}; //47,52,5,108 香港 //112,124,61,191 中国
@@ -17,7 +19,7 @@ const int remoteServerPort_switchTab[INTERNET_REMOTESERVER_PORTTAB_LEN] = {
 
 u8 zigbNwkReserveNodeNum_currentValue = 0; //zigb网络内当前有效节点数量
 
-stt_scenarioOprateDats scenarioOprateDats = {0};
+stt_scenarioOprateDats scenarioOprateDats = {0}; //场景操作数据缓存
 
 //u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0x1A, 0x1B, 0x1C}; //互控端口位-test
 u8 CTRLEATHER_PORT[USRCLUSTERNUM_CTRLEACHOTHER] = {0, 0, 0}; //互控端口位
@@ -45,7 +47,7 @@ static bool flashWriteLocalDev_reserveFLG = true; //互斥标志:本地信息写
 /*---------------------------------------------------------------------------------------------*/
 
 /*更新当前开关类型对应的有效操作位*/
-u8 ICACHE_FLASH_ATTR
+u8 
 switchTypeReserve_GET(void){
 
 	u8 act_Reserve = 0x07;
@@ -68,7 +70,7 @@ switchTypeReserve_GET(void){
 	return act_Reserve;
 }
 
-void ICACHE_FLASH_ATTR
+void 
 portCtrlEachOther_Reales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
@@ -78,7 +80,7 @@ portCtrlEachOther_Reales(void){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 devMAC_Reales(void){
 
 	const u8 debug_staMAC[DEV_MAC_LEN] = {0x20, 0x20, 0x00, 0x00, 0x00, 0xAA};
@@ -93,7 +95,7 @@ devMAC_Reales(void){
 #endif
 }
 
-void ICACHE_FLASH_ATTR
+void 
 devLockIF_Reales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
@@ -103,7 +105,7 @@ devLockIF_Reales(void){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 printf_datsHtoA(const u8 *TipsHead, u8 *dats , u8 datsLen){
 
 	u8 dats_Log[DEBUG_LOGLEN] = {0};
@@ -117,7 +119,28 @@ printf_datsHtoA(const u8 *TipsHead, u8 *dats , u8 datsLen){
 	os_printf("%s<datsLen: %d> %s.\n", TipsHead, datsLen, dats_Log);
 }
 
-void ICACHE_FLASH_ATTR
+void 
+printf_datsHtoB(const u8 *TipsHead, u8 *dats , u8 datsLen){
+
+	u8 dats_Log[DEBUG_LOGLEN] = {0};
+	u8 loop = 0;
+	u8 loopa = 0;
+
+	memset(&dats_Log[0], 0, DEBUG_LOGLEN * sizeof(u8));
+	for(loop = 0; loop < datsLen; loop ++){
+
+		for(loopa = 0; loopa < 8; loopa ++){
+
+			(dats[loop] & (0x80 >> loopa))?(dats_Log[8 * loop + loopa + loop] = '1'):(dats_Log[8 * loop + loopa + loop] = '0'); 
+		}
+
+		if(loop < datsLen - 1)dats_Log[8 * (loop + 1) + loop] = '-';
+	}
+
+	os_printf("%s<bit length: %d> %s.\n", TipsHead, datsLen * 8, dats_Log);
+}
+
+void 
 devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSave_Temp){	//设备参数写入flash 掉电存储
 
 	stt_usrDats_privateSave dats_Temp = {0};
@@ -162,10 +185,16 @@ devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSav
 
 			}break;
 
-		case obi_devCurtainOrbitalPeriod:{
+		case obj_devCurtainOrbitalPeriod:{
 
 				dats_Temp.devCurtain_orbitalPeriod = datsSave_Temp.devCurtain_orbitalPeriod;
 		
+			}break;
+
+		case obj_devCurtainOrbitalCounter:{
+
+				dats_Temp.devCurtain_orbitalCounter = datsSave_Temp.devCurtain_orbitalCounter;
+
 			}break;
 
 		case obj_serverIP_default:{
@@ -210,16 +239,10 @@ devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSav
 			
 			}break;
 
-		case obj_bkColor_swON:{
+		case obj_paramBKColorInsert:{
 
-				dats_Temp.bkColor_swON = datsSave_Temp.bkColor_swON;
-			
-			}break;
+				memcpy(&(dats_Temp.param_bkLightColorInsert), &(datsSave_Temp.param_bkLightColorInsert), sizeof(bkLightColorInsert_paramAttr));
 
-		case obj_bkColor_swOFF:{
-
-				dats_Temp.bkColor_swOFF = datsSave_Temp.bkColor_swOFF;
-			
 			}break;
 
 		default:break;
@@ -232,7 +255,7 @@ devParam_flashDataSave(devDatsSave_Obj dats_obj, stt_usrDats_privateSave datsSav
 	flashWriteLocalDev_reserveFLG = true;
 }
 
-void ICACHE_FLASH_ATTR
+void 
 devParam_SlaveZigbDevListInfoSave(stt_usrDats_zigbDevListInfo datsSave_Temp){ //网关下属zigb链表信息进行flash存储
 
 	spi_flash_erase_sector(DATS_LOCATION_START + FLASH_USROPREATION_ADDR_OFFSET_SLAVEDEVLIST_RECORD);
@@ -241,7 +264,22 @@ devParam_SlaveZigbDevListInfoSave(stt_usrDats_zigbDevListInfo datsSave_Temp){ //
 				    sizeof(stt_usrDats_zigbDevListInfo));
 }
 
-stt_usrDats_privateSave ICACHE_FLASH_ATTR
+void 
+devParam_scenarioDataLocalSave(stt_scenarioDataLocalSave *datsSave_Temp){ //场景数据本地存储 --针对zigb场景开关子设备的同步化操作
+
+	/*每扇区4096 Bytes，每个场景设备数量限定在100个以内，则每扇区可存储6个场景数据，但是这样需要进行覆盖操作，内存开销大，所以直接一个扇区存一个场景*/
+
+	spi_flash_erase_sector(DATS_LOCATION_START + FLASH_USROPREATION_ADDR_OFFSET_SCENARIODATA_RECORD + datsSave_Temp->scenarioDataSave_InsertNum);
+	spi_flash_write((DATS_LOCATION_START + FLASH_USROPREATION_ADDR_OFFSET_SCENARIODATA_RECORD + datsSave_Temp->scenarioDataSave_InsertNum) * SPI_FLASH_SEC_SIZE,
+					(u32 *)datsSave_Temp,
+					sizeof(stt_scenarioDataLocalSave));
+
+	if(datsSave_Temp)os_free(datsSave_Temp);
+
+//	os_printf(">>>data save sizeof is %d.\n", sizeof(stt_scenarioDataLocalSave));
+}
+
+stt_usrDats_privateSave 
 *devParam_flashDataRead(void){		 //从flash读取设备参数
 
 	while(!flashReadLocalDev_reserveFLG)vTaskDelay(1);
@@ -260,7 +298,7 @@ stt_usrDats_privateSave ICACHE_FLASH_ATTR
 	
 }
 
-stt_usrDats_zigbDevListInfo ICACHE_FLASH_ATTR
+stt_usrDats_zigbDevListInfo 
 *devParam_SlaveZigbDevListInfoRead(void){ //网关下属zigb链表信息从flash读取
 
 	stt_usrDats_zigbDevListInfo *dats_Temp = (stt_usrDats_zigbDevListInfo *)os_zalloc(sizeof(stt_usrDats_zigbDevListInfo));
@@ -277,8 +315,27 @@ stt_usrDats_zigbDevListInfo ICACHE_FLASH_ATTR
 	return NULL;
 }
 
+stt_scenarioDataLocalSave
+*devParam_scenarioDataLocalRead(u8 scenario_insertNum){
+
+	stt_scenarioDataLocalSave *dats_Temp = (stt_scenarioDataLocalSave *)os_zalloc(sizeof(stt_scenarioDataLocalSave));
+	
+	if(dats_Temp){
+
+		spi_flash_read((DATS_LOCATION_START + FLASH_USROPREATION_ADDR_OFFSET_SCENARIODATA_RECORD + scenario_insertNum) * SPI_FLASH_SEC_SIZE,
+					   (u32 *)dats_Temp,
+					   sizeof(stt_scenarioDataLocalSave));
+
+		dats_Temp->scenarioDataSave_InsertNum = scenario_insertNum;
+		
+		return dats_Temp;	//谨记释放内存
+	}
+
+	return NULL;
+}
+
 #if(RELAYSTATUS_REALYTIME_ENABLEIF)
-void ICACHE_FLASH_ATTR
+void 
 devParamDtaaSave_relayStatusRealTime(u8 currentRelayStatus){
 
 	u8 *dataInfoTemp_relayStatus = (u8 *)os_zalloc(sizeof(u8) * RECORDPERIOD_RELAYSTATUS_REALYTIME);
@@ -305,7 +362,7 @@ devParamDtaaSave_relayStatusRealTime(u8 currentRelayStatus){
 	if(dataInfoTemp_relayStatus)os_free(dataInfoTemp_relayStatus); //内存释放	
 }
 
-u8 ICACHE_FLASH_ATTR
+u8 
 devDataRecovery_relayStatus(void){
 
 	u32 relayStatus_temp = 0;
@@ -338,14 +395,19 @@ devDataRecovery_relayStatus(void){
 }
 #endif
 
-void ICACHE_FLASH_ATTR
+void 
 devData_recoverFactory(void){
 
     //flash清空
 	stt_usrDats_privateSave dats_Temp = {0};
-	
+
+	char ssid[32] = "no_ssid";
+	char password[64] = "no_password"; 
+	struct station_config station_cfgParam = {0};
+
 	spi_flash_erase_sector(DATS_LOCATION_START + FLASH_USROPREATION_ADDR_OFFSET_DEVLOCALINFO_RECORD);
 	spi_flash_erase_sector(DATS_LOCATION_START + FLASH_USROPREATION_ADDR_OFFSET_SLAVEDEVLIST_RECORD);
+	spi_flash_erase_sector(DATS_LOCATION_START + FLASH_USROPREATION_ADDR_OFFSET_SPERELAYSTATUS_RECORD);
 	spi_flash_write((DATS_LOCATION_START + 0) * SPI_FLASH_SEC_SIZE,
 				    (u32 *)&dats_Temp,
 				    sizeof(stt_usrDats_privateSave));
@@ -353,16 +415,19 @@ devData_recoverFactory(void){
 	//打生日标记 -(生日标记占用大小为1bit 赋0即可打标记，扇区清零已作用执行)
 
 	//默认值填装
-	dats_Temp.bkColor_swON = TIPSBKCOLOR_DEFAULT_ON;
-	dats_Temp.bkColor_swOFF = TIPSBKCOLOR_DEFAULT_OFF;
-	devParam_flashDataSave(obj_bkColor_swON, dats_Temp);
-	devParam_flashDataSave(obj_bkColor_swOFF, dats_Temp);
+	memset(&(dats_Temp.param_bkLightColorInsert), 0xff, sizeof(bkLightColorInsert_paramAttr)); //背光灯出厂值填装，全填0xff，使其初始化时被动赋值为默认值
+	devParam_flashDataSave(obj_paramBKColorInsert, dats_Temp); //存储执行
+	dats_Temp.devCurtain_orbitalPeriod = CURTAIN_ORBITAL_PERIOD_INITTIME; //窗帘轨道时间出厂值填装
+	devParam_flashDataSave(obj_devCurtainOrbitalPeriod, dats_Temp); //存储执行
 
-	dats_Temp.devCurtain_orbitalPeriod = 10;
-	devParam_flashDataSave(obi_devCurtainOrbitalPeriod, dats_Temp);
+	//路由器信息丢弃
+	station_cfgParam.bssid_set = 0;
+	memcpy(&station_cfgParam.ssid, ssid, 32);
+	memcpy(&station_cfgParam.password, password, 64);
+	wifi_station_set_config(&station_cfgParam); 
 }
 
-void ICACHE_FLASH_ATTR
+void 
 devFactoryRecord_Opreat(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();

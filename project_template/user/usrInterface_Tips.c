@@ -12,7 +12,7 @@ extern bool nwkInternetOnline_IF;
 
 u16 counter_tipsAct = 0;
 
-const func_ledRGB color_Tab[DEFULAT_COLORTAB_NUM] = {
+const func_ledRGB color_Tab[TIPS_SWBKCOLOR_TYPENUM] = {
 
 	{ 0,  0,  0}, {20, 10, 31}, {31,  0,  0},
 	{31,  0, 10}, {8,   0, 16}, {0,  31,  0},
@@ -24,8 +24,7 @@ const func_ledRGB tips_relayUnused = {0, 0,  0};
 
 u8  counter_ifTipsFree = TIPS_SWFREELOOP_TIME; //用户操作闲置计时值 单位：s
 
-u8 tipsInsert_swLedBKG_ON 	= 8; //开关 开 背景灯索引值
-u8 tipsInsert_swLedBKG_OFF 	= 5; //开关 关 背景灯索引值
+bkLightColorInsert_paramAttr devBackgroundLight_param = {0}; //背光灯索引参数缓存
 
 u8 timeCount_zigNwkOpen = 0; //zigb网络开放时间计时计数
 
@@ -47,22 +46,47 @@ LOCAL void tips_sysStandBy(void);
 LOCAL void thread_tipsGetDark(u8 funSet);
 /*---------------------------------------------------------------------------------------------*/
 
-void ICACHE_FLASH_ATTR
+void 
 ledBKGColorSw_Reales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
 
-	tipsInsert_swLedBKG_ON 	= datsRead_Temp->bkColor_swON;
-	tipsInsert_swLedBKG_OFF = datsRead_Temp->bkColor_swOFF;
+	switch(SWITCH_TYPE){
+	
+		case SWITCH_TYPE_CURTAIN:{
 
-	if(tipsInsert_swLedBKG_ON 	> DEFULAT_COLORTAB_NUM - 1)tipsInsert_swLedBKG_ON = TIPSBKCOLOR_DEFAULT_ON;
-	if(tipsInsert_swLedBKG_OFF 	> DEFULAT_COLORTAB_NUM - 1)tipsInsert_swLedBKG_OFF = TIPSBKCOLOR_DEFAULT_OFF;
+			devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press =\
+				datsRead_Temp->param_bkLightColorInsert.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press;
+			devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce =\
+				datsRead_Temp->param_bkLightColorInsert.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce;
+
+			if(devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press > (TIPS_SWBKCOLOR_TYPENUM - 1))devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press = 8; //蓝
+			if(devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce > (TIPS_SWBKCOLOR_TYPENUM - 1))devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce = 5; //绿
+		
+		}break;
+		
+		case SWITCH_TYPE_SWBIT1:
+		case SWITCH_TYPE_SWBIT2:
+		case SWITCH_TYPE_SWBIT3:{
+
+			devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open =\
+				datsRead_Temp->param_bkLightColorInsert.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open;
+			devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close =\
+				datsRead_Temp->param_bkLightColorInsert.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close;
+				
+			if(devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open > (TIPS_SWBKCOLOR_TYPENUM - 1))devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open = 8; //蓝
+			if(devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close > (TIPS_SWBKCOLOR_TYPENUM - 1))devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close = 5; //绿
+			
+		}break;
+		
+		default:{}break;
+	}
 
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
 /*led_Tips切换至正常模式*/
-void ICACHE_FLASH_ATTR
+void 
 tips_statusChangeToNormal(void){
 
 	counter_ifTipsFree = TIPS_SWFREELOOP_TIME;
@@ -70,7 +94,7 @@ tips_statusChangeToNormal(void){
 }
 
 /*led_Tips切换至AP配置模式*/
-void ICACHE_FLASH_ATTR
+void 
 tips_statusChangeToAPFind(void){
 
 	devTips_status = status_tipsAPFind;
@@ -78,7 +102,7 @@ tips_statusChangeToAPFind(void){
 }
 
 /*led_Tips切换至zigb网络开放模式*/
-void ICACHE_FLASH_ATTR
+void 
 tips_statusChangeToZigbNwkOpen(u8 timeopen){
 
 	timeCount_zigNwkOpen = timeopen;
@@ -87,7 +111,7 @@ tips_statusChangeToZigbNwkOpen(u8 timeopen){
 }
 
 /*led_Tips切换至触摸IC复位模式*/
-void ICACHE_FLASH_ATTR
+void 
 tips_statusChangeToTouchReset(void){
 
 	devTips_status = status_touchReset;
@@ -95,7 +119,7 @@ tips_statusChangeToTouchReset(void){
 }
 
 /*led_Tips切换至触摸IC复位模式*/
-void ICACHE_FLASH_ATTR
+void 
 tips_statusChangeToFactoryRecover(void){
 
 	devTips_status = status_sysStandBy;
@@ -115,7 +139,7 @@ void beeps_usrActive(u8 tons, u8 time, u8 loop){
 }
 
 /*led_Tips颜色设置*/
-void ICACHE_FLASH_ATTR
+void 
 tipsLED_rgbColorSet(u8 tipsRly_Num, u8 gray_R, u8 gray_G, u8 gray_B){
 
 	if(	(devTips_status == status_Normal) 	||
@@ -134,7 +158,7 @@ tipsLED_rgbColorSet(u8 tipsRly_Num, u8 gray_R, u8 gray_G, u8 gray_B){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 thread_tipsGetDark(u8 funSet){ //占位清色值
 
 	if((funSet & 0x01) >> 0)usrDats_actuator.func_tipsLedRGB[0].color_R = usrDats_actuator.func_tipsLedRGB[0].color_G = usrDats_actuator.func_tipsLedRGB[0].color_B = 0;
@@ -143,7 +167,7 @@ thread_tipsGetDark(u8 funSet){ //占位清色值
 	if((funSet & 0x08) >> 3)usrDats_actuator.func_tipsLedRGB[3].color_R = usrDats_actuator.func_tipsLedRGB[3].color_G = usrDats_actuator.func_tipsLedRGB[3].color_B = 0;
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 devNwkStatusTips_refresh(void){
 
 	u8 nwkStatus = 0;
@@ -183,7 +207,7 @@ devNwkStatusTips_refresh(void){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 usrTipsProcess_task(void *pvParameters){
 
 	for(;;){
@@ -263,25 +287,41 @@ usrTipsProcess_task(void *pvParameters){
 
 							case 0x01:{
 
-								(tipsLED_rgbColorSet(2, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B));
-								(tipsLED_rgbColorSet(1, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B));
-								(tipsLED_rgbColorSet(0, color_Tab[tipsInsert_swLedBKG_ON].color_R, color_Tab[tipsInsert_swLedBKG_ON].color_G, color_Tab[tipsInsert_swLedBKG_ON].color_B));
-
+								(tipsLED_rgbColorSet(2, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_B));
+								(tipsLED_rgbColorSet(1, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_B));
+								(tipsLED_rgbColorSet(0, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_B));
 							}break;
 
 							case 0x04:{
 							
-								(tipsLED_rgbColorSet(2, color_Tab[tipsInsert_swLedBKG_ON].color_R, color_Tab[tipsInsert_swLedBKG_ON].color_G, color_Tab[tipsInsert_swLedBKG_ON].color_B));
-								(tipsLED_rgbColorSet(1, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B));
-								(tipsLED_rgbColorSet(0, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B));
-
+								(tipsLED_rgbColorSet(2, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_B));
+								(tipsLED_rgbColorSet(1, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_B));
+								(tipsLED_rgbColorSet(0, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_B));
 							}break;
 
 							default:{
 
-								(tipsLED_rgbColorSet(2, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B));
-								(tipsLED_rgbColorSet(1, color_Tab[tipsInsert_swLedBKG_ON].color_R, color_Tab[tipsInsert_swLedBKG_ON].color_G, color_Tab[tipsInsert_swLedBKG_ON].color_B));
-								(tipsLED_rgbColorSet(0, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B));
+								(tipsLED_rgbColorSet(2, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_B));
+								(tipsLED_rgbColorSet(1, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_press].color_B));
+								(tipsLED_rgbColorSet(0, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.cuertain_BKlight_Param.cuertain_BKlightColorInsert_bounce].color_B));
 
 							}break;
 						}
@@ -292,18 +332,30 @@ usrTipsProcess_task(void *pvParameters){
 
 						(DEV_actReserve & 0x01)?\
 							((relayStatus_tipsTemp & 0x01)?\
-								(tipsLED_rgbColorSet(2, color_Tab[tipsInsert_swLedBKG_ON].color_R, color_Tab[tipsInsert_swLedBKG_ON].color_G, color_Tab[tipsInsert_swLedBKG_ON].color_B)):\
-								(tipsLED_rgbColorSet(2, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B))):\
+								(tipsLED_rgbColorSet(2, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_B)):\
+								(tipsLED_rgbColorSet(2, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_B))):\
 							(tipsLED_rgbColorSet(2, tips_relayUnused.color_R, tips_relayUnused.color_G, tips_relayUnused.color_B)); 			
 						(DEV_actReserve & 0x02)?\
 							((relayStatus_tipsTemp & 0x02)?\
-								(tipsLED_rgbColorSet(1, color_Tab[tipsInsert_swLedBKG_ON].color_R, color_Tab[tipsInsert_swLedBKG_ON].color_G, color_Tab[tipsInsert_swLedBKG_ON].color_B)):\
-								(tipsLED_rgbColorSet(1, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B))):\
+								(tipsLED_rgbColorSet(1, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_B)):\
+								(tipsLED_rgbColorSet(1, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_B))):\
 							(tipsLED_rgbColorSet(1, tips_relayUnused.color_R, tips_relayUnused.color_G, tips_relayUnused.color_B)); 			
 						(DEV_actReserve & 0x04)?\
 							((relayStatus_tipsTemp & 0x04)?\
-								(tipsLED_rgbColorSet(0, color_Tab[tipsInsert_swLedBKG_ON].color_R, color_Tab[tipsInsert_swLedBKG_ON].color_G, color_Tab[tipsInsert_swLedBKG_ON].color_B)):\
-								(tipsLED_rgbColorSet(0, color_Tab[tipsInsert_swLedBKG_OFF].color_R, color_Tab[tipsInsert_swLedBKG_OFF].color_G, color_Tab[tipsInsert_swLedBKG_OFF].color_B))):\
+								(tipsLED_rgbColorSet(0, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_open].color_B)):\
+								(tipsLED_rgbColorSet(0, color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_R, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_G, 
+														color_Tab[devBackgroundLight_param.sw3bitIcurtain_BKlight_Param.sw3bit_BKlight_Param.sw3bit_BKlightColorInsert_close].color_B))):\
 							(tipsLED_rgbColorSet(0, tips_relayUnused.color_R, tips_relayUnused.color_G, tips_relayUnused.color_B));
 
 					}break;
@@ -399,7 +451,7 @@ usrTipsProcess_task(void *pvParameters){
 	vTaskDelete(NULL);
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 tips_breath(void){
 
 	static u8 	localTips_Count = RLY_TIPS_PERIODUNITS - 1; //次步骤中期切换 初始值
@@ -443,7 +495,7 @@ tips_breath(void){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 tips_fadeOut(void){
 
 	static u8 	localTips_Count = 0; //次步骤初期切换 初始值
@@ -579,7 +631,7 @@ void tips_sysStandBy(void){
 }
 
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 tips_sysButtonReales(void){
 
 //	u8 code timUnit_period = 0;
@@ -698,7 +750,7 @@ tips_sysButtonReales(void){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 tips_specified(u8 tips_Type){ //tips类别
 
 	static u8 	localTips_Count = 0; //步骤初期切换初始值
@@ -863,7 +915,7 @@ tips_specified(u8 tips_Type){ //tips类别
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 usrTips_ThreadStart(void){
 
 	portBASE_TYPE xReturn = pdFAIL;

@@ -25,7 +25,7 @@ LOCAL xTaskHandle pxTaskHandle_upgradeOTA;
 LOCAL struct client_conn_param clientUpgrade_param;
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 funDevUpgrade_rsp(void *arg){
 
     struct upgrade_server_info *server = arg;
@@ -52,7 +52,7 @@ funDevUpgrade_rsp(void *arg){
     }
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 devUpgrade_begin(struct upgrade_server_info *infoServer){
 
 	u8 firwareBin_info[40] = {0}; //firewareNew_test.bin
@@ -92,7 +92,7 @@ devUpgrade_begin(struct upgrade_server_info *infoServer){
  *                server -- upgrade param
  * Returns      : none
 *******************************************************************************/
-//LOCAL void ICACHE_FLASH_ATTR
+//LOCAL void 
 //devUpgrade_begin(struct client_conn_param *pclient_param, struct upgrade_server_info *server)
 //{
 //    uint8 user_bin[40] = {0};
@@ -135,7 +135,7 @@ devUpgrade_begin(struct upgrade_server_info *infoServer){
 //    }
 //}
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 devUpgrade_Test(void){
 
 	if(UPGRADE_FLAG_START == system_upgrade_flag_check()){
@@ -150,7 +150,7 @@ devUpgrade_Test(void){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 upgradeDetecting_task(void *pvParameters){
 
 	u8 rptr_S2Z;	//通信线程消息队列
@@ -187,7 +187,7 @@ upgradeDetecting_task(void *pvParameters){
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 devUpgradeDetecting_Start(void){
 
 	portBASE_TYPE xReturn = pdFAIL;

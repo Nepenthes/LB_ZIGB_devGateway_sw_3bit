@@ -38,9 +38,9 @@ u16	 usrKeyCount	= 0;  //°´ÏÂÊ±¼ä¼ÆÊ±Ê¹ÄÜ£¨Çá´¥°´¼ü£©
 
 u8 touchKeepCnt_record	= 1;  //Á¬°´½øÐÐÊ±Á¬°´¼ÆÊý±äÁ¿£¬Á¬°´±Ø¶¨´Ó1¿ªÊ¼£¬·ñÔò²»½ÐÁ¬°´
 
-bool combinationFunTrigger_3S1L_standBy_FLG = false;  //Èý¶ÌÒ»³¤Ô¤´¥·¢±êÖ¾
-bool combinationFunTrigger_3S5S_standBy_FLG = false;  //Èý¶ÌÎå¶ÌÔ¤´¥·¢±êÖ¾
 u16  combinationFunFLG_3S5S_cancel_counter  = 0;	//Èý¶ÎÎå¶ÌÔ¤´¥·¢±êÖ¾_ÏÎ½ÓÊ±³¤È¡Ïû¼ÆÊý£¬ÏÎ½ÓÊ±¼ä¹ý³¤Ê±£¬½«Ô¤´¥·¢±êÖ¾È¡Ïû
+LOCAL param_combinationFunPreTrig param_combinationFunTrigger_3S1L = {0};
+LOCAL param_combinationFunPreTrig param_combinationFunTrigger_3S5S = {0};
 
 LOCAL bool relayStatusRecovery_doneIF = false; //¼ÌµçÆ÷ÈôÔÚ¼ÇÒäÊ¹ÄÜÇé¿öÏÂ£¬ÐèÒªÔÚ²¦ÂëÈ·ÈÏºó½øÐÐ»Ö¸´
 
@@ -49,7 +49,7 @@ LOCAL xTaskHandle pxTaskHandle_threadUsrInterface;
 LOCAL void usrSmartconfig_start(void);
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 usrFunCB_pressShort(void){
 
 	os_printf("usrKey_short, wait for reStart.\n");
@@ -60,10 +60,16 @@ usrFunCB_pressShort(void){
 	system_restart();
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 usrFunCB_pressLongA(void){
 
+	stt_usrDats_privateSave datsSave_Temp = {0};
+
 	os_printf("usrKey_Long_A.\n");
+
+	datsSave_Temp.dev_lockIF = 0; //ÖØÐÂÅäÖÃ ¾Í½âËø
+	devParam_flashDataSave(obj_dev_lockIF, datsSave_Temp);
+	deviceLock_flag = false;
 
 	beeps_usrActive(3, 20, 2);
 	if(WIFIMODE_STA == wifi_get_opmode()){
@@ -76,14 +82,14 @@ usrFunCB_pressLongA(void){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 usrFunCB_pressLongB(void){
 
 	os_printf("usrKey_Long_B£¬factory recovery opreation trig.\n");
 
 //	u8 mptr_upgrade = DEVUPGRADE_PUSH;
 //	mptr_upgrade = 0;
-//	xQueueSend(xMsgQ_devUpgrade, (void *)&mptr_upgrade, 0); 	
+//	xQueueSend(xMsgQ_devUpgrade, (void *)&mptr_upgrade, 0);
 
 	beeps_usrActive(3, 20, 2);
 	tips_statusChangeToFactoryRecover();
@@ -92,14 +98,14 @@ usrFunCB_pressLongB(void){
 	system_restart();
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 touchFunCB_sysGetRestart(void){
 
 //	os_printf("system get restart right now! please wait.\n");
 //	system_restart();
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 usrSoftAP_Config(void){
 
 	struct softap_config usrAP_config = {0};
@@ -117,7 +123,7 @@ usrSoftAP_Config(void){
 	wifi_softap_set_config(&usrAP_config);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 usrSmartconfig_stop(void){
 
 	if(smartconfigOpen_flg){
@@ -133,7 +139,7 @@ usrSmartconfig_stop(void){
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 usrSmartconfig_start(void){
 
 	os_printf("smartconfig start!!!.\n");
@@ -147,7 +153,7 @@ usrSmartconfig_start(void){
 	smartconfigOpen_flg = true;
 }
 
-void ICACHE_FLASH_ATTR
+void 
 usrZigbNwkOpen_start(void){
 
 	enum_zigbFunMsg mptr_zigbFunRm = msgFun_nwkOpen;
@@ -157,7 +163,7 @@ usrZigbNwkOpen_start(void){
 	os_printf("zigbNwk open start!!!.\n");
 }
 
-LOCAL void normalBussiness_shortTouchTrig(u8 statusPad){
+LOCAL void normalBussiness_shortTouchTrig(u8 statusPad, bool shortPressCnt_IF){
 
 	bool tipsBeep_IF = false;
 
@@ -224,17 +230,60 @@ LOCAL void normalBussiness_shortTouchTrig(u8 statusPad){
 			
 		}break;
 			
-		default:{}break;
+		default:{
+		
+			switch(SWITCH_TYPE){ //Õë¶Ô¶àÎ»¿ª¹Ø£¬¶à¸ö°´¼ü¿ÉÍ¬Ê±´¥·¢
+			
+				case SWITCH_TYPE_SWBIT1:{
+				
+					if(statusPad & 0x02)swCommand_fromUsr.objRelay |= 0x01;
+					if(DEV_actReserve & 0x02)tipsBeep_IF = 1;
+					
+				}break;
+					
+				case SWITCH_TYPE_SWBIT2:{
+				
+					if(statusPad & 0x01)swCommand_fromUsr.objRelay |= 0x01;
+					if(statusPad & 0x04)swCommand_fromUsr.objRelay |= 0x02;
+					
+					if(DEV_actReserve & 0x05)tipsBeep_IF = 1;
+					
+				}break;
+					
+				case SWITCH_TYPE_SWBIT3:{
+				
+					if(statusPad & 0x01)swCommand_fromUsr.objRelay |= 0x01;
+					if(statusPad & 0x02)swCommand_fromUsr.objRelay |= 0x02;
+					if(statusPad & 0x04)swCommand_fromUsr.objRelay |= 0x04;
+					
+					if(DEV_actReserve & 0x07)tipsBeep_IF = 1;
+					
+				}break;
+					
+				default:{
+				
+					return; //ÆäËûÀàÐÍ¿ª¹Ø²»Ö§³ÖÍ¬Ê±¶àÎ»°´¼ü´¥·¢£¬ÈôÓÐ¶àÎ»°´¼üÍ¬Ê±´¥·¢ÔòÅÐ¶¨ÎªÎó²Ù×÷£¬¶¯×÷²»Ö´ÐÐ
+				
+				}break;
+			}
+		
+		}break;
 	}
 	
 	if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3){
 	
 		swCommand_fromUsr.actMethod = relay_flip;
-		EACHCTRL_realesFLG = swCommand_fromUsr.objRelay; //»¥¿Ø
 		
 	}else{
 	
 		swCommand_fromUsr.actMethod = relay_OnOff;
+	}
+
+	if(!shortPressCnt_IF){ //·ÇÁ¬°´²Å´¥·¢»¥¿Ø
+	
+		if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //ÓÐÐ§»¥¿Ø´¥·¢
+		else
+		if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //ÓÐÐ§»¥¿Ø´¥·¢
 	}
 	
 	if(swCommand_fromUsr.objRelay)devActionPush_IF.push_IF = 1; //ÍÆËÍ
@@ -243,7 +292,7 @@ LOCAL void normalBussiness_shortTouchTrig(u8 statusPad){
 
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼ü´¥·¢
 
 	switch(statusCfm){
@@ -252,7 +301,7 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 
 			os_printf("touchShort get:%02X.\n", statusPad);
 		
-			normalBussiness_shortTouchTrig(statusPad); //ÆÕÍ¨¶Ì°´ÒµÎñ´¥·¢
+			normalBussiness_shortTouchTrig(statusPad, false); //ÆÕÍ¨¶Ì°´ÒµÎñ´¥·¢
 			
 		}break;
 		
@@ -264,22 +313,23 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 		
 			if(touchKeepCnt_record == 3){
 			
-				combinationFunTrigger_3S1L_standBy_FLG = true; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾ÖÃÎ»<3¶Ì1³¤>
-				
+				param_combinationFunTrigger_3S1L.param_combinationFunPreTrig_standBy_FLG = true; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾ÖÃÎ»<3¶Ì1³¤>
+				param_combinationFunTrigger_3S1L.param_combinationFunPreTrig_standBy_keyVal = statusPad; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢°´¼ü¼üÖµ¶Ô±È»º´æ¸üÐÂ<3¶Ì1³¤>
+			
 			}else{
 			
-				combinationFunTrigger_3S1L_standBy_FLG = false;
+				memset(&param_combinationFunTrigger_3S1L, 0, sizeof(param_combinationFunPreTrig));
 			} 
 
-			normalBussiness_shortTouchTrig(statusPad); //ÆÕÍ¨¶Ì°´ÒµÎñ´¥·¢
+			normalBussiness_shortTouchTrig(statusPad, true); //ÆÕÍ¨¶Ì°´ÒµÎñ´¥·¢
 
 		}break;
 		
 		case press_LongA:{
 
-			if(combinationFunTrigger_3S1L_standBy_FLG){ //ÌØÊâ×éºÏ°´¼ü¶¯×÷ÒµÎñ´¥·¢<3¶Ì1³¤>
+			if(param_combinationFunTrigger_3S1L.param_combinationFunPreTrig_standBy_FLG && (statusPad == param_combinationFunTrigger_3S1L.param_combinationFunPreTrig_standBy_keyVal)){ //ÌØÊâ×éºÏ°´¼ü¶¯×÷ÒµÎñ´¥·¢<3¶Ì1³¤>
 
-				combinationFunTrigger_3S1L_standBy_FLG = false; //Ô¤´¥·¢±êÖ¾ÇåÁã
+				memset(&param_combinationFunTrigger_3S1L, 0, sizeof(param_combinationFunPreTrig)); //Ô¤´¥·¢±êÖ¾ÇåÁã¡¢²ÎÊýÇå¿Õ
 
 				os_printf("combination fun<3S1L> trig!\n");
 
@@ -331,17 +381,19 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 		if(statusCfm != press_ShortCnt){
 
 			touchKeepCnt_record = 1; //Á¬°´½øÐÐÊ±¼ÆÊý±äÁ¿¸´Ô­
-			combinationFunTrigger_3S1L_standBy_FLG = false; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì1³¤>
+			memset(&param_combinationFunTrigger_3S1L, 0, sizeof(param_combinationFunPreTrig)); //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»¡¢²ÎÊýÇå¿Õ<3¶Ì1³¤>
 			
-			if(statusCfm != press_Short)combinationFunTrigger_3S5S_standBy_FLG = false; //·Ç¶Ì°´¼°·ÇÁ¬Ðø¶Ì°´£¬Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì5¶Ì>
+			if(statusCfm != press_Short)memset(&param_combinationFunTrigger_3S5S, 0, sizeof(param_combinationFunPreTrig)); //·Ç¶Ì°´¼°·ÇÁ¬Ðø¶Ì°´£¬Ô¤´¥·¢±êÖ¾¸´Î»¡¢²ÎÊýÇå¿Õ<3¶Ì5¶Ì>
 		}
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 touchPad_functionTrigContinue(u8 statusPad, u8 loopCount){	//ÆÕÍ¨´¥Ãþ°´¼üÁ¬°´´¥·¢
 	
-	EACHCTRL_realesFLG = statusPad; //Á¬°´½áÊøºó´¥·¢»¥¿Ø
+	if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG = statusPad; //Á¬°´×îºóÒ»´Î´¥·¢ÓÐÐ§»¥¿Ø
+	else
+	if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //ÓÐÐ§»¥¿Ø´¥·¢
 	devStatus_pushIF = true; //Á¬°´½áÊøºó´¥·¢¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ
 
 	os_printf("touchCnt over:%02X, %02dtime.\n", statusPad, loopCount);
@@ -374,16 +426,17 @@ touchPad_functionTrigContinue(u8 statusPad, u8 loopCount){	//ÆÕÍ¨´¥Ãþ°´¼üÁ¬°´´¥·
 
 		case 3:{
 
-			combinationFunTrigger_3S5S_standBy_FLG = true; //ÌØÊâ×éºÏ¶¯×÷°´¼üÔ¤´¥·¢±êÖ¾ÖÃÎ»<3¶Ì5¶Ì>
+			param_combinationFunTrigger_3S5S.param_combinationFunPreTrig_standBy_FLG = true; //ÌØÊâ×éºÏ¶¯×÷°´¼üÔ¤´¥·¢±êÖ¾ÖÃÎ»<3¶Ì5¶Ì>
+			param_combinationFunTrigger_3S5S.param_combinationFunPreTrig_standBy_keyVal = statusPad; //ÌØÊâ×éºÏ¶¯×÷°´¼üÔ¤´¥·¢°´¼ü¶Ô±È¼üÖµ¸üÐÂ<3¶Ì5¶Ì>
 			combinationFunFLG_3S5S_cancel_counter = 3000;  //ÌØÊâ×éºÏ¶¯×÷°´¼üÔ¤´¥ÏÎ½ÓÊ±¼ä¼ÆÊ±¿ªÊ¼<3¶Ì5¶Ì>
 		
 		}break;
 
 		case 5:{
 
-			if(combinationFunTrigger_3S5S_standBy_FLG){ //ÌØÊâ×éºÏ°´¼ü¶¯×÷ÒµÎñ´¥·¢<3¶Ì5¶Ì>
+			if(param_combinationFunTrigger_3S5S.param_combinationFunPreTrig_standBy_FLG && (statusPad == param_combinationFunTrigger_3S5S.param_combinationFunPreTrig_standBy_keyVal)){ //ÌØÊâ×éºÏ°´¼ü¶¯×÷ÒµÎñ´¥·¢<3¶Ì5¶Ì>
 			
-				combinationFunTrigger_3S5S_standBy_FLG = false;
+				memset(&param_combinationFunTrigger_3S5S, 0, sizeof(param_combinationFunPreTrig));
 
 				os_printf("combination fun<3S5S> trig!\n");
 				
@@ -402,15 +455,15 @@ touchPad_functionTrigContinue(u8 statusPad, u8 loopCount){	//ÆÕÍ¨´¥Ãþ°´¼üÁ¬°´´¥·
 	{ //°´¼üÌØÊâ×éºÏ¶¯×÷Ïà¹Ø±êÖ¾¼°±äÁ¿ÇåÁã
 	
 		touchKeepCnt_record = 1; //Á¬°´½øÐÐÊ±¼ÆÊý±äÁ¿¸´Î»
-		combinationFunTrigger_3S1L_standBy_FLG = false; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì1³¤>
-		if(loopCount != 3){ //
+		memset(&param_combinationFunTrigger_3S1L, 0, sizeof(param_combinationFunPreTrig)); //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»¡¢²ÎÊýÇå¿Õ<3¶Ì1³¤>
+		if(loopCount != 3){ //·Ç3¶Ì
 		
-			combinationFunTrigger_3S5S_standBy_FLG = false; //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»<3¶Ì5³¤>
+			memset(&param_combinationFunTrigger_3S5S, 0, sizeof(param_combinationFunPreTrig)); //ÌØÊâ×éºÏ¶¯×÷Ô¤´¥·¢±êÖ¾¸´Î»¡¢²ÎÊýÇå¿Õ<3¶Ì5³¤>
 		}
 	}
 }
 
-LOCAL u8 ICACHE_FLASH_ATTR
+LOCAL u8 
 DcodeScan_oneShoot(void){
 	
 	u8 val_Dcode = 0;
@@ -436,14 +489,14 @@ DcodeScan_oneShoot(void){
 	return val_Dcode;
 }
 
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 UsrKEYScan_oneShoot(void){
 
 	if(!usrDats_sensor.usrKeyIn_fun_0)return true;
 	else return false;
 }
 
-LOCAL u8 ICACHE_FLASH_ATTR
+LOCAL u8 
 touchPadScan_oneShoot(void){
 
 	u8 valKey_Temp = 0;
@@ -455,7 +508,7 @@ touchPadScan_oneShoot(void){
 	return valKey_Temp;
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 DcodeScan(void){
 
 	static u8 	val_Dcode_Local 	= 0x00, //Òç³ö¸³Öµ ÌáÇ°´¥·¢Ê×´Î¼ì²â
@@ -556,7 +609,7 @@ DcodeScan(void){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 UsrKEYScan(funKey_Callback funCB_Short, funKey_Callback funCB_LongA, funKey_Callback funCB_LongB){
 	
 	const  u16 	keyCfrmLoop_Short 	= 20,		//Ïû¶¶Ê±¼ä µ¥Î»£ºms
@@ -612,7 +665,7 @@ UsrKEYScan(funKey_Callback funCB_Short, funKey_Callback funCB_LongA, funKey_Call
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 touchPad_Scan(void){
 
 	static u8   touchPad_temp = 0;
@@ -633,7 +686,7 @@ touchPad_Scan(void){
 
 	u16 conterTemp = 0; //
 
-	if(!combinationFunFLG_3S5S_cancel_counter)combinationFunTrigger_3S5S_standBy_FLG = false; //<3¶Ì5¶Ì>ÌØÊâ×éºÏ°´¼üÏÎ½ÓÊ±¼ä³¬Ê±¼ì²âÒµÎñ£¬³¬Ê±Ôò½«¶ÔÓ¦Ô¤´¥·¢±êÖ¾¸´Î»
+	if(!combinationFunFLG_3S5S_cancel_counter)memset(&param_combinationFunTrigger_3S5S, 0, sizeof(param_combinationFunPreTrig)); //<3¶Ì5¶Ì>ÌØÊâ×éºÏ°´¼üÏÎ½ÓÊ±¼ä³¬Ê±¼ì²âÒµÎñ£¬³¬Ê±Ôò½«¶ÔÓ¦Ô¤´¥·¢±êÖ¾¸´Î»¡¢²ÎÊýÇå¿Õ
 
 	if(touchPadScan_oneShoot()){
 		
@@ -665,6 +718,15 @@ touchPad_Scan(void){
 						funTrigFLG_LongB = true;
 						touchPad_functionTrigNormal(touchPad_temp, press_LongB);
 					}
+				}
+			}
+			else{
+
+				if((touchCfrmLoop_MAX - touchPadActCounter) < touchCfrmLoop_Short){ //¶Ì°´Ïû¶¶Ê±¼äÄÚËæÊ±¿É×ö¼üÖµ±ä¸ü£¬·ñÔò½ûÖ¹
+				
+					touchPadActCounter = touchCfrmLoop_MAX;
+					touchPadContinueCnt = timeDef_touchPressContinue;  //Á¬°´¼ä¸ôÊ±¼äÅÐ¶Ï
+					touchPad_temp = touchPadScan_oneShoot();
 				}
 			}
 		}
@@ -706,7 +768,7 @@ touchPad_Scan(void){
 
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 usrInterfaceProcess_task(void *pvParameters){
 
 	for(;;){
@@ -721,7 +783,7 @@ usrInterfaceProcess_task(void *pvParameters){
 	vTaskDelete(NULL);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 usrInterface_ThreadStart(void){
 
 	portBASE_TYPE xReturn = pdFAIL;

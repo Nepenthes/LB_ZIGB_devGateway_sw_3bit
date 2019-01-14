@@ -5,10 +5,28 @@
 
 #define TIPS_SWFREELOOP_TIME	60 //用户操作释放时长周期定义 单位：s
 
-#define DEFULAT_COLORTAB_NUM	10 //色值表数目
+#define TIPS_SWBKCOLOR_TYPENUM	10 //色值表数目
 
 #define TIPSBKCOLOR_DEFAULT_ON	8  //默认开关触摸背景色：开启
 #define TIPSBKCOLOR_DEFAULT_OFF 5  //默认开关触摸背景色：关闭
+
+typedef union{
+
+	union{
+	
+		struct{
+		
+			u8 sw3bit_BKlightColorInsert_open; //开色
+			u8 sw3bit_BKlightColorInsert_close; //关色
+		}sw3bit_BKlight_Param;
+		
+		struct{
+		
+			u8 cuertain_BKlightColorInsert_press; //按下色
+			u8 cuertain_BKlightColorInsert_bounce; //弹起色
+		}cuertain_BKlight_Param;
+	}sw3bitIcurtain_BKlight_Param;	
+}bkLightColorInsert_paramAttr;
 
 typedef enum{
 

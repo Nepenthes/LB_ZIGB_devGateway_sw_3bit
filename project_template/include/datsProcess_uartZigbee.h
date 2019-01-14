@@ -36,6 +36,8 @@
 #define ZIGB_CLUSTER_DEFAULT_DEVID		13
 #define ZIGB_CLUSTER_DEFAULT_CULSTERID	13
 
+#define ZIGBPANID_CURRENT_REALESPERIOD	50 //PANID数据实时更新周期 单位：s
+
 #define ZIGBNWKOPENTIME_DEFAULT	30 //zigb网络开放时间 默认值 单位：ms
 
 #define ZIGB_PANID_MAXVAL     	0x3FFF //随机产生PANID最大值
@@ -51,6 +53,8 @@
 #define zigB_remoteDataTransASY_txPeriod		200 //单条数据请求周期	单位：ms
 #define zigB_remoteDataTransASY_txReapt			10	//单条数据请求重复次数
 #define zigB_remoteDataTransASY_txUartOnceWait	4	//异步串口通信远端数据请求单次等待时间 单位：10ms
+
+#define zigB_reconnectCauseDataReqFailLoop		4	//因为远端数据传输错误次数超出定义范围 判断zigbee模块重启
 
 #define zigB_ScenarioCtrlDataTransASY_txBatchs_EN			0	//异步串口通信远端场景控制数据请求多批次分发使能
 #define zigB_ScenarioCtrlDataTransASY_opreatOnceNum			10	//场景控制逻辑业务单轮操作单位数目(大包场次分批次异步发送，单轮/单批次数目)
@@ -73,38 +77,50 @@ typedef enum{
 	msgFun_scenarioCrtl, //场景集群控制
 	msgFun_dtPeriodHoldPst, //使子节点设备周期性远端通信挂起
 	msgFun_dtPeriodHoldCancelAdvance,  //使子节点设备周期性远端通信挂起提前结束
-}enum_zigbFunMsg;
+}enum_zigbFunMsg; //zib系统功能触发 消息队列数据类型，功能枚举
 
 typedef struct{
 
-	u16 deviveID;
-	u8  endPoint; 
-}devDatsTrans_portAttr;
+	u16 deviveID; //ZNP协议层：设备ID
+	u8  endPoint; //ZNP协议层：终端点
+}devDatsTrans_portAttr; //数据传输 ZNP协议层通讯点属性数据结构
 
 typedef struct{
 
-	u8 command;
+	enum{
+
+		zigbScenarioReverseCtrlCMD_scenarioCtrl = 0xCA,
+
+	}command:8; //命令
+
+	u8 scenario_Num; //场景号
+	u8 dataOnceReserve_pWord; //数据包口令 -用于在通讯环境恶劣情况下的重发判断
+}frame_zigbScenarioReverseCtrl; //zigb场景反向控制数据通讯端口 通讯帧数据结构
+
+typedef struct{
+
+	u8 command; //命令
+	u8 dats[32]; //数据
+	u8 datsLen; //数据长度
+}frame_zigbSysCtrl; //zigb系统数据通讯端口 通讯帧数据结构
+
+typedef struct{
+
+	u8 dats[128 + 25]; //数据
+	u8 datsLen; //数据长度
+}sttUartRcv_rmoteDatComming; //zigb常规数据通讯端口 通讯帧数据结构
+
+typedef struct{
+
 	u8 dats[32];
 	u8 datsLen;
-}frame_zigbSysCtrl;
-
-typedef struct{
-
-	u8 dats[128 + 25];
-	u8 datsLen;
-}sttUartRcv_rmoteDatComming;
-
-typedef struct{
-
-	u8 dats[32];
-	u8 datsLen;
-}sttUartRcv_sysDat;
+}sttUartRcv_sysDat; //串口数据接收 系统数据类型 数据结构
 
 typedef struct{
 
 	u8 dats[16];
 	u8 datsLen;
-}sttUartRcv_rmDatsReqResp;
+}sttUartRcv_rmDatsReqResp;        //串口数据接收 系统数据类型 数据结构
 
 typedef struct{
 
@@ -112,23 +128,23 @@ typedef struct{
 		
 	u8 ctrlEachOther_dat; //互控值
 	u8 ctrlEachOther_loop; //当前值互控剩余发送次数
-}sttUartRcv_ctrlEachDat;
+}sttUartRcv_ctrlEachDat;       //串口数据接收 互控数据类型 数据结构
 
 typedef struct{
 
-	u16 respNwkAddr;
-}sttUartRcv_scenarioCtrlResp;
+	u16 respNwkAddr; //响应的子设备zigb网络短地址
+}sttUartRcv_scenarioCtrlResp;        //串口数据接收 互控下发时子设备响应数据类型 数据结构
 
 typedef struct{
 
-	u8  dats[10];
-	u8  datsLen;
+	u8  dats[10]; //数据
+	u8  datsLen; //数据长度
 	
-	u8 	portPoint;
-	u16	nwkAddr;
+	u8 	portPoint; //端点口号
+	u16	nwkAddr; //网络短地址
 	
 	u8 constant_Loop; //重复次数
-}datsAttr_dtCtrlEach;
+}datsAttr_dtCtrlEach; //互控发送数据	数据结构
 
 #define dataRemote_RESPLEN 8
 typedef struct{

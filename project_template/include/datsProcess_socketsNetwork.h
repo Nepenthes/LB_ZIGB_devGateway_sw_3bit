@@ -4,6 +4,8 @@
 #include "esp_common.h"
 #include "freertos/queue.h"
 
+#include "datsManage.h"
+
 #define FRAME_HEAD_MOBILE		0xAA
 #define FRAME_HEAD_SERVER		0xCC
 #define FRAME_HEAD_HEARTB		0xAA
@@ -60,6 +62,7 @@
 #define FRAME_MtoZIGBCMD_cmdCfg_scenarioSet	0x45	/*命令*///普通开关场景配置
 #define FRAME_MtoZIGBCMD_cmdCfg_scenarioCtl	0x47	/*命令*///普通开关场景控制
 #define FRAME_MtoZIGBCMD_cmdCfg_scenarioDel	0x48	/*命令*///普通开关场景删除
+#define FRAME_MtoZIGBCMD_cmdCfg_scenarioReg 0x50	/*命令*///场景信息本地注册 --针对zigb场景开关子设备设置按键对应触发场景时的同步化操作，场景信息存在网关内，场景子设备只存场景号
 
 #define	cmdConfigTim_normalSwConfig			0xA0	/*定时数据辨识*///普通时刻定时
 #define cmdConfigTim_onoffDelaySwConfig		0xA1	/*定时数据辨识*///延时定时
@@ -100,6 +103,8 @@ typedef struct{
 //直接向外暴露消息队列句柄
 extern xQueueHandle xMsgQ_Socket2Zigb;
 extern xQueueHandle xMsgQ_datsFromSocketPort;
+
+extern stt_agingDataSet_bitHold dev_agingCmd_sndInitative;
 
 void network_mainThreadStart(void);
 u8 frame_Check(unsigned char frame_temp[], u8 check_num);

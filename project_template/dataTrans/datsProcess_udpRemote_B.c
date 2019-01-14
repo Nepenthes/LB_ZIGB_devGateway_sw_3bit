@@ -23,7 +23,7 @@ LOCAL struct espconn infoTemp_connUDP_remote_B;
 LOCAL esp_udp ssdp_udp_remote_B;	
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 
 	bool dataCorrect_FLG = false;
@@ -142,7 +142,12 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 
 			bool specialCMD_IF = false;
 
-			if(*(pdata + 3) == FRAME_MtoZIGBCMD_cmdCfg_scenarioCtl)specialCMD_IF = true; //指令数据甄别
+//			printf_datsHtoA("scenario opreat coming dataHead:", pdata, 12);
+
+			if((*(pdata + 3) == FRAME_MtoZIGBCMD_cmdCfg_scenarioCtl) ||
+			   (*(pdata + 3) == FRAME_MtoZIGBCMD_cmdCfg_scenarioDel) ||
+			   (*(pdata + 3) == FRAME_MtoZIGBCMD_cmdCfg_scenarioReg)
+			)specialCMD_IF = true; //指令数据甄别
 
 			if(specialCMD_IF){ //一级非常规处理
 
@@ -154,8 +159,8 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 
 						u8 local_scenarioRespond[11] = {0};
 						memcpy(&local_scenarioRespond[0], pdata, 9); //前段复制
-						memcpy(&local_scenarioRespond[9], &pdata[len - 2], 2); //后段复制
-						espconn_sent(&infoTemp_connUDP_remote_B, local_scenarioRespond, 11); //向服务器回码
+						memcpy(&local_scenarioRespond[9], &pdata[len - 2], 2); //后段复制 -帧尾和口令
+						espconn_sent(&infoTemp_connUDP_remote_B, local_scenarioRespond, 11); //即刻向服务器回码
 					
 						u16 dats_Len = (u16)(*(pdata + 1)) * 6 + 11; //实际帧长（数据包帧长为操作开关个数）
 						
@@ -205,6 +210,59 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 						
 					}break;
 
+					case FRAME_MtoZIGBCMD_cmdCfg_scenarioReg:{ //>>>场景注册<<<
+
+						u8 local_scenarioRespond[11] = {0}; //应答数据缓存
+					
+						memcpy(&local_scenarioRespond[0], pdata, 9); //前段复制
+						memcpy(&local_scenarioRespond[9], &pdata[len - 2], 2); //后段复制 -帧尾和场景序号
+						espconn_sent(&infoTemp_connUDP_remote_B, local_scenarioRespond, 11); //即刻向服务器回码
+
+						u16 dats_Len = (u16)(*(pdata + 1)) * 6 + 11; //实际帧长（数据包帧长为操作开关个数）
+
+						if((dats_Len == len) && !memcmp(&MACSTA_ID[1], pdata + 4, 5)){ //特殊指令 MAC从第五字节开始
+						
+							u16 loop = 0;
+							u16 pointTemp = 0;
+							stt_scenarioDataLocalSave *scenarioDataSave_Temp = (stt_scenarioDataLocalSave *)os_zalloc(sizeof(stt_scenarioDataLocalSave)); //存储缓存
+							
+							memset(scenarioDataSave_Temp, 0x00, sizeof(stt_scenarioDataLocalSave));	//存储缓存清零					
+							scenarioDataSave_Temp->devNode_num = *(pdata + 1); //存储缓存场景设备数量填装
+							scenarioDataSave_Temp->scenarioDataSave_InsertNum = pdata[len - 2]; //存储缓存场景存储序号填装
+							
+							for(loop = 0; loop < *(pdata + 1); loop ++){ //存储缓存场景数据填装
+						
+								pointTemp = 9 + 6 * loop;
+								memcpy(scenarioDataSave_Temp->scenarioOprate_Unit[loop].devNode_MAC, pdata + pointTemp, 5); //存储缓存场景单位MAC填装
+								scenarioDataSave_Temp->scenarioOprate_Unit[loop].devNode_opStatus = *(pdata + pointTemp + 5); //存储缓存场景单位操作状态填装
+							}
+
+							scenarioDataSave_Temp->scenarioReserve_opt = scenarioOpt_enable; //数据可用标识置位
+
+							devParam_scenarioDataLocalSave(scenarioDataSave_Temp); //存储执行
+
+							os_printf(">>>>>>scenarioReg cmd coming(send by phone), insertNum:%d, devNodeNum:%d.\n", scenarioDataSave_Temp->scenarioDataSave_InsertNum,
+																												 	 scenarioDataSave_Temp->devNode_num);
+						}
+						else{ //打印错误分析
+
+							os_printf("scenarioReg parsing fail, {frameDataLen:%04d<-->actualDataLen:%04d, frameTargetMAC:%02X %02X %02X %02X %02X, actualMAC:%02X %02X %02X %02X %02X}<<<<.\n", 
+									  (*(pdata + 1)) * 6 + 11,
+									  len,
+									  *(pdata + 4),
+									  *(pdata + 5),
+									  *(pdata + 6),
+									  *(pdata + 7),
+									  *(pdata + 8),
+									  MACSTA_ID[1],
+									  MACSTA_ID[2],
+									  MACSTA_ID[3],
+									  MACSTA_ID[4],
+									  MACSTA_ID[5]);
+						}
+
+					}break;
+
 					default:break;
 				}
 			}
@@ -223,7 +281,7 @@ myUDP_remote_BCallback(void *arg, char *pdata, unsigned short len){
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 UDPremoteB_datsSend(u8 dats[], u16 datsLen){
 
 	sint8 res = ESPCONN_OK;
@@ -240,7 +298,7 @@ UDPremoteB_datsSend(u8 dats[], u16 datsLen){
 //	espconn_sent(&infoTemp_connUDP_remote_B, dats, datsLen);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 mySocketUDPremote_B_buildAct(u8 refRemote_IP[4], int serverPort){
 
 	memcpy(ssdp_udp_remote_B.remote_ip, refRemote_IP, 4);
@@ -255,7 +313,7 @@ mySocketUDPremote_B_buildAct(u8 refRemote_IP[4], int serverPort){
 	os_printf("[Tips_socketUDP_B]: socket build compeled!!!\n");
 }
 
-void ICACHE_FLASH_ATTR
+void 
 mySocketUDPremote_B_serverChange(u8 remoteIP_toChg[4]){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
@@ -281,7 +339,7 @@ mySocketUDPremote_B_serverChange(u8 remoteIP_toChg[4]){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 mySocketUDPremote_B_portChange(int remotePort_toChg){
 
 	espconn_delete(&infoTemp_connUDP_remote_B);
@@ -298,7 +356,7 @@ mySocketUDPremote_B_portChange(int remotePort_toChg){
 	os_printf("[Tips_socketUDP_B]: remoteServer port change to %d cmp!!!\n", remotePort_toChg);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 mySocketUDPremote_B_buildInit(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();

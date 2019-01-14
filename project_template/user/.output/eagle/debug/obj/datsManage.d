@@ -78,6 +78,7 @@
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/spi_flash.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/pwm.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/freertos/queue.h \
- ../include/datsProcess_uartZigbee.h ../include/datsManage.h \
+ ../include/datsProcess_uartZigbee.h ../include/usrInterface_Tips.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/espressif/spi_flash.h \
- ../include/usrInterface_Tips.h
+ ../include/usrInterface_Tips.h ../include/hwPeripherial_Actuator.h \
+ ../include/bsp_Hardware.h

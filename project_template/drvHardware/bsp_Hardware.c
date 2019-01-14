@@ -23,7 +23,7 @@ stt_HC595_datsOut 	usrDats_actuator = {
 LOCAL os_timer_t timer_spi595and597_datsReales;
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL u8 ICACHE_FLASH_ATTR
+LOCAL u8
 spi595and597_datsReales(u8 datsIn){
 
 	u8 loop;
@@ -56,7 +56,7 @@ spi595and597_datsReales(u8 datsIn){
 
 #if(HARDWARE_VERSION_DEBUG == 1)
 
-LOCAL void ICACHE_FLASH_ATTR 
+LOCAL void  
 virtual_SPI595and597_gpioInit(void){
 
 	PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0);
@@ -95,7 +95,7 @@ virtual_SPI595and597_gpioInit(void){
 //	pwm_start();
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void  IRAM_ATTR
 timerFunCB_hw595and597datsReales(void *para){
 
 	u8 datsOut_temp = 0;
@@ -297,7 +297,7 @@ timerFunCB_hw595and597datsReales(void *para){
 
 #else
 
-LOCAL void ICACHE_FLASH_ATTR 
+LOCAL void  
 virtual_SPI595and597_gpioInit(void){
 
 	PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO4_U, FUNC_GPIO4);
@@ -337,7 +337,7 @@ virtual_SPI595and597_gpioInit(void){
 //	pwm_start();
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void IRAM_ATTR
 timerFunCB_hw595and597datsReales(void *para){
 
 	u8 datsOut_temp = 0;
@@ -660,7 +660,7 @@ timerFunCB_hw595and597datsReales(void *para){
 
 #endif
 
-void ICACHE_FLASH_ATTR
+void 
 dats595and597_keepRealesingStart(void){
 
 	virtual_SPI595and597_gpioInit();

@@ -15,7 +15,7 @@ u8 EACHCTRL_realesFLG = 0; //互控更新使能标志 标志（一位：bit0\二位：bit1\三位：
 stt_motorAttr curtainAct_Param = {
 	
 	.act_counter = 0, 
-	.act_period = 10, 
+	.act_period = CURTAIN_ORBITAL_PERIOD_INITTIME, 
 	.act = cTact_stop
 };
 
@@ -25,8 +25,10 @@ relayStatus_PUSH devActionPush_IF = {0}; //推送执行数据
 LOCAL xTaskHandle pxTaskHandle_threadRelayActing;
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 relay_statusReales(void){
+
+	stt_usrDats_privateSave datsSave_Temp = {0};
 	
 	switch(SWITCH_TYPE){
 
@@ -55,6 +57,9 @@ relay_statusReales(void){
 				
 					PIN_RELAY_1 = PIN_RELAY_2 = PIN_RELAY_3 = 0;
 					curtainAct_Param.act = cTact_stop;
+
+					datsSave_Temp.devCurtain_orbitalCounter = curtainAct_Param.act_counter; //每次窗帘运动停止时，记录当前位置对应的计时变量值
+					devParam_flashDataSave(obj_devCurtainOrbitalCounter, datsSave_Temp); //本地存储动作执行
 					
 				}break;
 			}
@@ -89,7 +94,7 @@ relay_statusReales(void){
 }
 
 /*继电器动作*/
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 actuatorRelay_Act(relay_Command dats){
 	
 	u8 statusTemp = 0;
@@ -155,7 +160,7 @@ actuatorRelay_Act(relay_Command dats){
 	}
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 relayActingProcess_task(void *pvParameters){
 
 	u16 log_Counter = 0;
@@ -189,21 +194,20 @@ relayActingProcess_task(void *pvParameters){
 	vTaskDelete(NULL);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 curtainOrbitalPeriod_Reales(void){
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
 	
 	curtainAct_Param.act_period = datsRead_Temp->devCurtain_orbitalPeriod; //窗帘轨道时间初始化更新
-	
-	if(!curtainAct_Param.act_period)curtainAct_Param.act_period = 240;
-	else
-	if(curtainAct_Param.act_period == 0xff)curtainAct_Param.act_period = 10;
+	curtainAct_Param.act_period = datsRead_Temp->devCurtain_orbitalPeriod; //窗帘轨道位置计时值初始化更新
+	if(curtainAct_Param.act_period == 0xff)curtainAct_Param.act_period = CURTAIN_ORBITAL_PERIOD_INITTIME; //限值
+	if(curtainAct_Param.act_counter == 0xff)curtainAct_Param.act_counter = 0; //限制
 	
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 actuatorRelay_Init(void){
 
 	if(relayStatus_ifSave = statusSave_enable){
@@ -228,7 +232,7 @@ actuatorRelay_Init(void){
 	os_printf("status relay recovery data read is: %02X.\n", swCommand_fromUsr.objRelay);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 relayActing_ThreadStart(void){
 
 	portBASE_TYPE xReturn = pdFAIL;

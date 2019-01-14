@@ -8,6 +8,8 @@
 #define actRelay_ON		1
 #define actRelay_OFF	0
 
+#define CURTAIN_ORBITAL_PERIOD_INITTIME	0	//窗帘轨道时间出厂初始值，单位：s
+
 #define PIN_RELAY_1		usrDats_actuator.conDatsOut_rly_0
 #define PIN_RELAY_2		usrDats_actuator.conDatsOut_rly_1
 #define PIN_RELAY_3		usrDats_actuator.conDatsOut_rly_2
@@ -35,7 +37,7 @@ typedef struct{
 		cTact_stop = 0,
 		cTact_close,
 		cTact_open,
-	}act;
+	}act:8;
 
 }stt_motorAttr;
 

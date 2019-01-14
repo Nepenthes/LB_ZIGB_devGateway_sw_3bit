@@ -93,8 +93,9 @@
  ../include/datsProcess_tcpRemote_B.h ../include/datsProcess_udpLocal_A.h \
  ../include/datsProcess_udpRemote_B.h ../include/datsProcess_uartZigbee.h \
  D:/Prj_temp/ESP8266_RTOS_SDK-2.0.0/include/freertos/queue.h \
- ../include/datsProcess_socketsNetwork.h ../include/timer_Activing.h \
- ../include/usrInterface_keylbutton.h ../include/hwPeripherial_Actuator.h \
- ../include/bsp_Hardware.h ../include/usrInterface_Tips.h \
- ../include/devUpgrade_OTA.h ../include/datsManage.h \
- ../include/datsProcess_uartZigbee.h ../include/datsManage.h
+ ../include/datsProcess_socketsNetwork.h ../include/datsManage.h \
+ ../include/datsProcess_uartZigbee.h ../include/usrInterface_Tips.h \
+ ../include/timer_Activing.h ../include/usrInterface_keylbutton.h \
+ ../include/hwPeripherial_Actuator.h ../include/bsp_Hardware.h \
+ ../include/usrInterface_Tips.h ../include/devUpgrade_OTA.h \
+ ../include/datsManage.h

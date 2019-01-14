@@ -24,6 +24,8 @@ u16  nwkZigb_currentPANID = 0;
 
 u16	 sysZigb_random = 0x1234;
 
+u8 zigbee_currentPanID_reslesCounter = ZIGBPANID_CURRENT_REALESPERIOD; //当前panid数据实时更新读取周期计时变量
+
 xQueueHandle xMsgQ_Zigb2Socket; //zigbee到socket数据中转消息队列
 xQueueHandle xMsgQ_uartToutDats_dataSysRespond; //串口数据接收超时断帧数据队列-协议栈或系统回复数据
 xQueueHandle xMsgQ_uartToutDats_dataRemoteComing; //串口数据接收超时断帧数据队列-远端数据
@@ -34,13 +36,14 @@ xQueueHandle xMsgQ_timeStampGet; //网络时间戳获取消息队列
 xQueueHandle xMsgQ_zigbFunRemind; //zigb功能触发消息队列
 
 #define FifoFullIntr_lengthLimit	120 //fifo溢出值定义
-#define TimeOutIntr_timeLimit		100 //超时接收时间定义
+#define TimeOutIntr_timeLimit		50 //超时接收时间定义
 #define fifoLength  1024 //串口缓存长度
 
 datsAttr_dtCtrlEach datsSend_requestEx[3] = {0}; //持续型远端请求数据，无需应答，互控专用
 u8 localDataRecord_eaCtrl[USRCLUSTERNUM_CTRLEACHOTHER] = {0}; //本地静态实际互控数据记录
 u16 dtReqEx_counter = 0; //持续型远端请求数据发送间隔计时变量，互控专用
 stt_dataRemoteReq localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen] = {0}; //常规远端数据请求发送队列
+u8 dataRemoteRequest_failCount = 0; //常规远端数据请求失败次数记录
 stt_dataScenarioReq localZigbASYDT_bufQueueScenarioReq[zigB_ScenarioCtrlDataTransASY_QbuffLen] = {0}; //场景控制远端数据请求发送队列
 u8 localZigbASYDT_scenarioCtrlReserveAllnum = 0; //当前剩余有效的场景操作单位数目
 
@@ -58,7 +61,7 @@ LOCAL xTaskHandle pxTaskHandle_threadZigbee;
 LOCAL bool zigbNodeDevDetectManage_runningEN = false; //设备链表监管运行使能
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL STATUS ICACHE_FLASH_ATTR
+LOCAL STATUS 
 appMsgQueueCreat_Z2S(void){
 
 	xMsgQ_Zigb2Socket = xQueueCreate(30, sizeof(stt_threadDatsPass));
@@ -66,7 +69,7 @@ appMsgQueueCreat_Z2S(void){
 	else return OK;
 }
 
-LOCAL STATUS ICACHE_FLASH_ATTR
+LOCAL STATUS 
 appMsgQueueCreat_uartToutDatsRcv(void){
 
 	xMsgQ_uartToutDats_dataSysRespond = xQueueCreate(30, sizeof(sttUartRcv_sysDat));
@@ -82,7 +85,7 @@ appMsgQueueCreat_uartToutDatsRcv(void){
 	else return OK;
 }
 
-LOCAL STATUS ICACHE_FLASH_ATTR
+LOCAL STATUS 
 appMsgQueueCreat_timeStampGet(void){
 
 	xMsgQ_timeStampGet = xQueueCreate(5, sizeof(u32_t));
@@ -90,7 +93,7 @@ appMsgQueueCreat_timeStampGet(void){
 	else return OK;
 }
 
-LOCAL STATUS ICACHE_FLASH_ATTR
+LOCAL STATUS 
 appMsgQueueCreat_zigbFunRemind(void){
 
 	xMsgQ_zigbFunRemind = xQueueCreate(5, sizeof(enum_zigbFunMsg));
@@ -99,7 +102,7 @@ appMsgQueueCreat_zigbFunRemind(void){
 }
 
 /*zigbee节点设备链表重复节点优化去重*/ 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 zigbDev_delSame(nwkStateAttr_Zigb *head)	
 {
     nwkStateAttr_Zigb *p,*q,*r;
@@ -129,7 +132,7 @@ zigbDev_delSame(nwkStateAttr_Zigb *head)
 }
 
 /*zigbee节点设备链表新增（注册）节点设备（将设备信息注册进链表）*/ 
-LOCAL u8 ICACHE_FLASH_ATTR
+LOCAL u8 
 zigbDev_eptCreat(nwkStateAttr_Zigb *pHead,nwkStateAttr_Zigb pNew){
 	
 	nwkStateAttr_Zigb *pAbove = pHead;
@@ -155,7 +158,7 @@ zigbDev_eptCreat(nwkStateAttr_Zigb *pHead,nwkStateAttr_Zigb pNew){
 }
 
 /*zigbee节点提取从设备链表中，根据网络短地址;！！！谨记使用完节点信息后将内存释放！！！*/
-LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
+LOCAL nwkStateAttr_Zigb 
 *zigbDev_eptPutout_BYnwk(nwkStateAttr_Zigb *pHead,u16 nwkAddr,bool method){	//method = 1,源节点地址返回，操作返回内存影响源节点信息; method = 0,映射信息地址返回，操作返回内存，不影响源节点信息.
 	
 	nwkStateAttr_Zigb *pAbove = pHead;
@@ -193,7 +196,7 @@ LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
 } 
 
 /*zigbee节点提取从设备链表中，根据节点设备MAC地址和设备类型;！！！谨记使用完节点信息后将内存释放！！！*/
-LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
+LOCAL nwkStateAttr_Zigb 
 *zigbDev_eptPutout_BYpsy(nwkStateAttr_Zigb *pHead,u8 macAddr[DEVMAC_LEN],u8 devType,bool method){		//method = 1,源节点地址返回，操作返回内存影响源节点信息; method = 0,映射信息地址返回，操作返回内存，不影响源节点信息.
 	nwkStateAttr_Zigb *pAbove = pHead;
 	nwkStateAttr_Zigb *pFollow;
@@ -230,7 +233,7 @@ LOCAL nwkStateAttr_Zigb ICACHE_FLASH_ATTR
 }
 
 /*zigbee删除设备节点信息从链表中，根据节点设备网络短地址*/ 
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 zigbDev_eptRemove_BYnwk(nwkStateAttr_Zigb *pHead,u16 nwkAddr){
 	
 	nwkStateAttr_Zigb *pAbove = pHead;
@@ -257,7 +260,7 @@ zigbDev_eptRemove_BYnwk(nwkStateAttr_Zigb *pHead,u16 nwkAddr){
 }
 
 /*zigbee删除设备节点信息从链表中，根据节点设备MAC地址和设备类型*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 zigbDev_eptRemove_BYpsy(nwkStateAttr_Zigb *pHead,u8 macAddr[DEVMAC_LEN],u8 devType){
 	
 	nwkStateAttr_Zigb *pAbove = pHead;
@@ -284,7 +287,7 @@ zigbDev_eptRemove_BYpsy(nwkStateAttr_Zigb *pHead,u8 macAddr[DEVMAC_LEN],u8 devTy
 }
 
 /*zigbee节点设备链表长度测量*/
-LOCAL u8 ICACHE_FLASH_ATTR
+LOCAL u8 
 zigbDev_chatLenDectect(nwkStateAttr_Zigb *pHead){
 	
 	nwkStateAttr_Zigb *pAbove = pHead;
@@ -302,7 +305,7 @@ zigbDev_chatLenDectect(nwkStateAttr_Zigb *pHead){
 }
 
 /*zigbee节点设备信息链表遍历，将所有节点设备类型和设备MAC地址打包输出*/
-LOCAL u8 ICACHE_FLASH_ATTR
+LOCAL u8 
 ZigBdevDispList(nwkStateAttr_Zigb *pHead,u8 DevInform[]){
 	
 	nwkStateAttr_Zigb *Disp = pHead;
@@ -326,7 +329,7 @@ ZigBdevDispList(nwkStateAttr_Zigb *pHead,u8 DevInform[]){
 }
 
 /*zigbee节点设备信息链表遍历，将所有节点信息进行flash保存*/
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 ZigBdevListInfoSaveToFlash(nwkStateAttr_Zigb *pHead){
 
 	nwkStateAttr_Zigb *Disp = pHead;
@@ -359,7 +362,7 @@ ZigBdevListInfoSaveToFlash(nwkStateAttr_Zigb *pHead){
 }
 
 /*一次性将flash内子设备链表信息更新到空链表*///开机运行一次即可
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 ZigBdevListInfoRealesFromFlash(stt_usrDats_zigbDevListInfo *devListParam, nwkStateAttr_Zigb *pHead){
 
 	nwkStateAttr_Zigb *pAbove = pHead;
@@ -409,7 +412,7 @@ uartTX_char(uint8 uart, uint8 TxChar)
     return OK;
 }
 
-LOCAL STATUS
+LOCAL STATUS 
 uart_putDats(uint8 uart, char *dats, uint8 datsLen){
 
 	while(datsLen --){
@@ -418,7 +421,7 @@ uart_putDats(uint8 uart, char *dats, uint8 datsLen){
 	}
 }
 
-LOCAL void
+LOCAL void 
 myUart0datsTrans_intr_funCB(void *para){
 
 	uint8 RcvChar;
@@ -598,10 +601,10 @@ myUart0datsTrans_intr_funCB(void *para){
 								}	
 							}
 
-							os_printf(">>>>>>>>>errFrame tail:%02X-%02X-%02X, legal_impStart:%04X.\n",	uart0_rxTemp[uartBuff_rcvLength - 3],
-																										uart0_rxTemp[uartBuff_rcvLength - 2],
-																										uart0_rxTemp[uartBuff_rcvLength - 1],
-																										uartBuff_baseInsertStart);
+//							os_printf(">>>>>>>>>errFrame tail:%02X-%02X-%02X, legal_impStart:%04X.\n",	uart0_rxTemp[uartBuff_rcvLength - 3],
+//																										uart0_rxTemp[uartBuff_rcvLength - 2],
+//																										uart0_rxTemp[uartBuff_rcvLength - 1],
+//																										uartBuff_baseInsertStart);
 						}
 					}				
 				}
@@ -632,7 +635,7 @@ myUart0datsTrans_intr_funCB(void *para){
 
 }
 
-void ICACHE_FLASH_ATTR
+void 
 uart0Init_datsTrans(void){
 
 	UART_WaitTxFifoEmpty(UART0);
@@ -667,7 +670,7 @@ uart0Init_datsTrans(void){
 }
 
 /*数据异或校验*///ZNP协议帧
-LOCAL uint8 ICACHE_FLASH_ATTR
+LOCAL uint8 
 XORNUM_CHECK(u8 buf[], u8 length){
 
 	uint8 loop = 0;
@@ -679,7 +682,7 @@ XORNUM_CHECK(u8 buf[], u8 length){
 }
 
 /*zigbee数据帧加载*/
-LOCAL uint8 ICACHE_FLASH_ATTR
+LOCAL uint8 
 ZigB_TXFrameLoad(uint8 frame[],uint8 cmd[],uint8 cmdLen,uint8 dats[],uint8 datsLen){		
 
 	const uint8 frameHead = ZIGB_FRAME_HEAD;	//ZNP,SOF帧头.
@@ -704,7 +707,7 @@ ZigB_TXFrameLoad(uint8 frame[],uint8 cmd[],uint8 cmdLen,uint8 dats[],uint8 datsL
 }
 
 /*zigbee系统控制帧帧加载*/
-LOCAL uint8 ICACHE_FLASH_ATTR
+LOCAL uint8 
 ZigB_sysCtrlFrameLoad(u8 datsTemp[], frame_zigbSysCtrl dats){
 
 	datsTemp[0] = dats.command;
@@ -713,7 +716,7 @@ ZigB_sysCtrlFrameLoad(u8 datsTemp[], frame_zigbSysCtrl dats){
 }
 
 /*zigbee单指令数据请求*/
-bool ICACHE_FLASH_ATTR 
+bool  
 zigb_datsRequest(u8 frameREQ[],	//请求帧
 					  u8 frameREQ_Len,	//请求帧长度
 					  u8 resp_cmd[2],	//预期应答指令
@@ -759,7 +762,7 @@ zigb_datsRequest(u8 frameREQ[],	//请求帧
 }
 
 /*zigbee单指令下发及响应验证*/
-bool ICACHE_FLASH_ATTR 
+bool  
 zigb_VALIDA_INPUT(uint8 REQ_CMD[2],			//指令
 				       uint8 REQ_DATS[],	//数据
 				       uint8 REQdatsLen,	//数据长度
@@ -808,7 +811,7 @@ zigb_VALIDA_INPUT(uint8 REQ_CMD[2],			//指令
 }
 
 /*zigbee通信簇注册*/
-LOCAL bool ICACHE_FLASH_ATTR 
+LOCAL bool  
 zigb_clusterSet(u16 deviveID, u8 endPoint){
 
 	const datsAttr_ZigbInit default_param = {{0x24,0x00},{0x0E,0x0D,0x00,0x0D,0x00,0x0D,0x00,0x01,0x00,0x00,0x01,0x00,0x00},0x0D,{0xFE,0x01,0x64,0x00,0x00,0x65},0x06,20}; //数据簇注册，默认参数
@@ -848,7 +851,7 @@ zigb_clusterSet(u16 deviveID, u8 endPoint){
 }
 
 /*zigbee多通信簇注册*/
-LOCAL bool ICACHE_FLASH_ATTR 
+LOCAL bool  
 zigb_clusterMultiSet(devDatsTrans_portAttr devPort[], u8 Len){
 
 	u8 loop = 0;
@@ -862,7 +865,7 @@ zigb_clusterMultiSet(devDatsTrans_portAttr devPort[], u8 Len){
 }
 
 /*zigbee互控通讯簇注册*/
-LOCAL bool ICACHE_FLASH_ATTR 
+LOCAL bool  
 zigb_clusterCtrlEachotherCfg(void){
 
 	u8 loop = 0;
@@ -885,7 +888,7 @@ zigb_clusterCtrlEachotherCfg(void){
 }
 
 /*zigbee网络开放及关闭操作*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 zigbNetwork_OpenIF(bool opreat_Act, u8 keepTime){
 
 	const datsAttr_ZigbInit default_param = {{0x26,0x08}, {0xFF,0xFF,0x00}, 0x03, {0xFE,0x01,0x66,0x08,0x00,0x6F}, 0x06, 500};	//命令帧，默认参数
@@ -914,7 +917,7 @@ zigbNetwork_OpenIF(bool opreat_Act, u8 keepTime){
 }
 
 /*zigbee系统时间设置*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 zigB_sysTimeSet(u32_t timeStamp){
 
 	const datsAttr_ZigbInit default_param = {{0x21,0x10},{0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},0x0B,{0xFE,0x01,0x61,0x10,0x00},0x05,30}; //zigbee系统时间设置，默认参敿
@@ -962,7 +965,7 @@ zigB_sysTimeSet(u32_t timeStamp){
 }
 
 /*zigbee系统时间获取*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 zigB_sysTimeGetRealesWithLocal(void){
 
 	u32_t timeStamp_temp = 0;
@@ -1035,7 +1038,7 @@ zigB_sysTimeGetRealesWithLocal(void){
 }
 
 /*zigbee硬件初始化复位*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 ZigB_resetInit(void){
 
 //	portTickType xLastWakeTime;
@@ -1097,7 +1100,7 @@ ZigB_resetInit(void){
 }
 
 /*zigbee PANID获取*/
-LOCAL u16 ICACHE_FLASH_ATTR
+LOCAL u16 
 ZigB_getPanIDCurrent(void){
 
 	u16 PANID_temp = 0;
@@ -1127,7 +1130,7 @@ ZigB_getPanIDCurrent(void){
 }
 
 /*zigbee IEEE地址获取*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 ZigB_getIEEEAddr(void){
 
 	datsZigb_reqGet *local_datsParam = (datsZigb_reqGet *)os_zalloc(sizeof(datsZigb_reqGet));
@@ -1162,7 +1165,7 @@ ZigB_getIEEEAddr(void){
 }
 
 /*zigbee 随机数获取*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 ZigB_getRandom(void){
 
 	u16 PANID_temp = 0;
@@ -1196,7 +1199,7 @@ ZigB_getRandom(void){
 }
 
 /*zigbee初始化状态自检*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 ZigB_inspectionSelf(bool hwReset_IF){ //是否硬件复位
 	
 	datsZigb_reqGet *local_datsParam = (datsZigb_reqGet *)malloc(sizeof(datsZigb_reqGet));
@@ -1235,7 +1238,6 @@ ZigB_inspectionSelf(bool hwReset_IF){ //是否硬件复位
 		}
 	}
 
-	
 	if(true == resultREQ){
 
 		resultREQ = zigb_VALIDA_INPUT(	(u8 *)default_param.zigbInit_reqCMD,
@@ -1254,7 +1256,7 @@ ZigB_inspectionSelf(bool hwReset_IF){ //是否硬件复位
 }
 
 /*zigbee网络激活重新连接*/
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 ZigB_nwkReconnect(void){
 
 	static u8 reconnectStep = 1;
@@ -1301,7 +1303,7 @@ ZigB_nwkReconnect(void){
 }
 
 /*zigbee初始化*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 ZigB_NwkCreat(uint16_t PANID, uint8_t CHANNELS){		
 
 #define	zigbNwkCrateCMDLen 	10	//指令个数
@@ -1409,7 +1411,7 @@ ZigB_NwkCreat(uint16_t PANID, uint8_t CHANNELS){
 }
 
 /*zigbee数据接收*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 ZigB_datsRemoteRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 	
 #define zigbcmdRX_Len 2
@@ -1492,7 +1494,7 @@ ZigB_datsRemoteRX(datsAttr_ZigbTrans *datsRX, u32 timeWait){
 }
 
 /*zigbee PANID更新*/
-LOCAL bool ICACHE_FLASH_ATTR
+LOCAL bool 
 ZigB_PANIDReales(bool inspection_IF){ //是否自检
 
 	stt_usrDats_privateSave *datsRead_Temp = devParam_flashDataRead();
@@ -1502,8 +1504,8 @@ ZigB_PANIDReales(bool inspection_IF){ //是否自检
 	bool result = false; 
 	static u8 inspectionFail_count = 0; //自检失败次数---防止更换模块不更换主控导致主控残留信息不一致而一直进行错误自检
 
-	os_printf("PANID_current is : %04X.\n", panID_temp);
-	os_printf("PANID_flash is : %04X.\n", datsRead_Temp->panID_default);
+	os_printf("PANID_current is : %d.\n", panID_temp);
+	os_printf("PANID_flash is : %d.\n", datsRead_Temp->panID_default);
 
 //	datsRead_Temp->panID_default = 0;
 
@@ -1556,7 +1558,7 @@ ZigB_PANIDReales(bool inspection_IF){ //是否自检
 }
 
 /*zigbee数据发送*/
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 ZigB_remoteDatsSend_straightforward(u16 DstAddr, //地址
 											  u8 port, //端口
 											  u8 dats[], //数据
@@ -1651,7 +1653,10 @@ LOCAL bool ZigB_datsTX_ASY( uint16 	DstAddr,
 		}
 	}
 
-	os_printf(">>>dataRM reqQ full.\n");
+	os_printf(">>>dataRM reqQ full.\n"); //发送缓存数组过满
+	
+	memcpy(&localZigbASYDT_bufQueueRemoteReq[0], &localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen / 2], sizeof(stt_dataRemoteReq) * zigB_remoteDataTransASY_QbuffLen / 2); //缓存整理，发送缓存组过满处理，发送缓存组清空掉一半
+	memset(&localZigbASYDT_bufQueueRemoteReq[zigB_remoteDataTransASY_QbuffLen / 2], 0, sizeof(stt_dataRemoteReq) * zigB_remoteDataTransASY_QbuffLen / 2); //发送缓存组过满处理，发送缓存组清空掉一半
 
 	return false; 
 }
@@ -1712,7 +1717,7 @@ LOCAL bool ZigB_ScenarioTX_ASY( uint16 	DstAddr,
 	return false; 
 }
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 zigbeeDataTransProcess_task(void *pvParameters){
 
 #define zigB_mThread_dispLen  		150	//打印信息缓存
@@ -1807,6 +1812,13 @@ zigbeeDataTransProcess_task(void *pvParameters){
 					}
 				}
 			}
+		}
+
+		/*zigbee 当前实时PANID数值周期性读取更新*/
+		if(!zigbee_currentPanID_reslesCounter){
+
+			zigbee_currentPanID_reslesCounter = ZIGBPANID_CURRENT_REALESPERIOD;
+			nwkZigb_currentPANID = ZigB_getPanIDCurrent();
 		}
 
 		/*zigb网络是否在线*/
@@ -1999,39 +2011,76 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 					devStatus_ctrlEachO_IF = false;
 
-					for(loop = 0; loop < USRCLUSTERNUM_CTRLEACHOTHER; loop ++){ //三个开关位分别判定
-					
-						if(EACHCTRL_realesFLG & (1 << loop)){ //互控有效位判断
-						
-							EACHCTRL_realesFLG &= ~(1 << loop); //互控有效位清零
-							
-							datsTemp_zigbCtrlEachother[0] = (status_actuatorRelay >> loop) & 0x01; //有效位开关状态填装
-							
-							if((CTRLEATHER_PORT[loop] > CTRLEATHER_PORT_NUMSTART) && CTRLEATHER_PORT[loop] < CTRLEATHER_PORT_NUMTAIL){ //判定是否为有效互控端口
+					switch(SWITCH_TYPE){
 
-								localDataRecord_eaCtrl[loop] = datsTemp_zigbCtrlEachother[0]; //本地记录更新
-								(datsTemp_zigbCtrlEachother[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+						case SWITCH_TYPE_SWBIT1:
+						case SWITCH_TYPE_SWBIT2:
+						case SWITCH_TYPE_SWBIT3:{
 
-								/*无视回码，持续性发送*///非常规
-								datsSend_requestEx[loop].nwkAddr = 0xffff; //间接组播（指定端口广播）
-								datsSend_requestEx[loop].portPoint = CTRLEATHER_PORT[loop]; //对应绑定端口加载
-								memset(datsSend_requestEx[loop].dats, 0, 10 * sizeof(u8));
+							for(loop = 0; loop < USRCLUSTERNUM_CTRLEACHOTHER; loop ++){ //三个开关位分别判定
+							
+								if(EACHCTRL_realesFLG & (1 << loop)){ //互控有效位判断
 								
-								datsSend_requestEx[loop].dats[0] = datsTemp_zigbCtrlEachother[0];
-								datsSend_requestEx[loop].dats[1] = 0; //下标2为剩余发送次数，发送时实时更新，初值赋0
-								datsSend_requestEx[loop].datsLen = 2;
-								datsSend_requestEx[loop].constant_Loop = 30; //无视回码发30次
+									EACHCTRL_realesFLG &= ~(1 << loop); //互控有效位清零
+									
+									datsTemp_zigbCtrlEachother[0] = (status_actuatorRelay >> loop) & 0x01; //有效位开关状态填装
+									
+									if((CTRLEATHER_PORT[loop] > CTRLEATHER_PORT_NUMSTART) && CTRLEATHER_PORT[loop] < CTRLEATHER_PORT_NUMTAIL){ //判定是否为有效互控端口
 
-//								TXCMP_FLG = ZigB_datsTX_ASY(0xFFFF, 
-//															CTRLEATHER_PORT[loop],
-//															CTRLEATHER_PORT[loop],
-//															ZIGB_CLUSTER_DEFAULT_CULSTERID,
-//															(u8 *)datsTemp_zigbCtrlEachother,
-//															datsTempLen_zigbCtrlEachother,
-//															localZigbASYDT_bufQueueRemoteReq,
-//															zigB_remoteDataTransASY_QbuffLen);
+										localDataRecord_eaCtrl[loop] = datsTemp_zigbCtrlEachother[0]; //本地记录更新
+										(datsTemp_zigbCtrlEachother[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[loop]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+
+										/*无视回码，持续性发送*///非常规
+										datsSend_requestEx[loop].nwkAddr = 0xffff; //间接组播（指定端口广播）
+										datsSend_requestEx[loop].portPoint = CTRLEATHER_PORT[loop]; //对应绑定端口加载
+										memset(datsSend_requestEx[loop].dats, 0, 10 * sizeof(u8));
+										
+										datsSend_requestEx[loop].dats[0] = datsTemp_zigbCtrlEachother[0];
+										datsSend_requestEx[loop].dats[1] = 0; //下标2为剩余发送次数，发送时实时更新，初值赋0
+										datsSend_requestEx[loop].datsLen = 2;
+										datsSend_requestEx[loop].constant_Loop = 30; //无视回码发30次
+
+//										TXCMP_FLG = ZigB_datsTX_ASY(0xFFFF, 
+//																	CTRLEATHER_PORT[loop],
+//																	CTRLEATHER_PORT[loop],
+//																	ZIGB_CLUSTER_DEFAULT_CULSTERID,
+//																	(u8 *)datsTemp_zigbCtrlEachother,
+//																	datsTempLen_zigbCtrlEachother,
+//																	localZigbASYDT_bufQueueRemoteReq,
+//																	zigB_remoteDataTransASY_QbuffLen);
+									}
+								}
 							}
-						}
+							
+						}break;
+
+						case SWITCH_TYPE_CURTAIN:{
+
+							if(EACHCTRL_realesFLG == 1){ //互控有效位判断
+							
+								EACHCTRL_realesFLG = 0; //互控有效位清零
+								
+								if((CTRLEATHER_PORT[0] > CTRLEATHER_PORT_NUMSTART) && CTRLEATHER_PORT[0] < CTRLEATHER_PORT_NUMTAIL){ //判定是否为有效互控端口
+
+									datsTemp_zigbCtrlEachother[0] = status_actuatorRelay; //直接给操作值[1:关，2:停，3:开]
+									localDataRecord_eaCtrl[0] = datsTemp_zigbCtrlEachother[0]; //本地记录更新
+									(datsTemp_zigbCtrlEachother[0])?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+
+									/*无视回码，持续性发送*///非常规
+									datsSend_requestEx[0].nwkAddr = 0xffff; //间接组播（指定端口广播）
+									datsSend_requestEx[0].portPoint = CTRLEATHER_PORT[0]; //对应绑定端口加载
+									memset(datsSend_requestEx[0].dats, 0, 10 * sizeof(u8));
+									
+									datsSend_requestEx[0].dats[0] = datsTemp_zigbCtrlEachother[0];
+									datsSend_requestEx[0].dats[1] = 0; //下标2为剩余发送次数，发送时实时更新，初值赋0
+									datsSend_requestEx[0].datsLen = 2;
+									datsSend_requestEx[0].constant_Loop = 30; //无视回码发30次
+								}
+							}
+
+						}break;
+
+						default:{}break;
 					}
 				}
 			}
@@ -2142,15 +2191,83 @@ zigbeeDataTransProcess_task(void *pvParameters){
 					case zigbTP_MSGCOMMING:{
 
 						//端点口判定
-						switch(local_datsRX->datsSTT.stt_MSG.srcEP){	
+						switch(local_datsRX->datsSTT.stt_MSG.srcEP){
 
-							case ZIGB_ENDPOINT_CTRLSECENARIO:{
+							case ZIGB_ENDPOINT_CTRLSECENARIO:{ //端点口数据解析：场景反向控制，针对用于zigb子设备反向网关主动请求场景控制
 
-								
+								frame_zigbScenarioReverseCtrl datsTempRX_zigbScenarioReverseCtrl = {0};
+								frame_zigbScenarioReverseCtrl datsTempTX_zigbScenarioReverseCtrl = {0};
+
+								static u8 DataOnceReserve_pWord_local = 0; //本地口令值
+
+								memcpy(&datsTempRX_zigbScenarioReverseCtrl, &(local_datsRX->datsSTT.stt_MSG.dats[0]), sizeof(frame_zigbScenarioReverseCtrl)); //数据结构化
+
+//								os_printf(">>>cmd:%02X, num:%02X, pWord:%02X.\n", datsTempRX_zigbScenarioReverseCtrl.command,
+//																				  datsTempRX_zigbScenarioReverseCtrl.scenario_Num,
+//																				  datsTempRX_zigbScenarioReverseCtrl.dataOnceReserve_pWord);
+
+								if(DataOnceReserve_pWord_local != datsTempRX_zigbScenarioReverseCtrl.dataOnceReserve_pWord){ //通过口令判断是否为重复发送的数据
+							
+									DataOnceReserve_pWord_local = datsTempRX_zigbScenarioReverseCtrl.dataOnceReserve_pWord; //本地口令更新
+
+									switch(datsTempRX_zigbScenarioReverseCtrl.command){
+
+										case zigbScenarioReverseCtrlCMD_scenarioCtrl:{ //子命令，场景控制（来自子设备的反向控制）
+
+											u8 loop = 0;
+
+											os_printf(">>>scenario reverseCtrl cmd coming(sned by devNode), insertNum:%d.\n", datsTempRX_zigbScenarioReverseCtrl.scenario_Num);
+
+											stt_scenarioDataLocalSave *scenarioCtrlData = devParam_scenarioDataLocalRead(datsTempRX_zigbScenarioReverseCtrl.scenario_Num); //网关内部存储场景数据读取
+
+											if(scenarioCtrlData->scenarioReserve_opt == scenarioOpt_enable){ //场景数据是否可用判断
+
+												memset(&scenarioOprateDats, 0, sizeof(stt_scenarioOprateDats));  //场景控制缓存数据复位
+												memcpy(scenarioOprateDats.scenarioOprate_Unit, scenarioCtrlData->scenarioOprate_Unit, sizeof(scenarioOprateUnit_Attr) * zigB_ScenarioCtrlDataTransASY_QbuffLen); //场景数据赋值
+												scenarioOprateDats.devNode_num = scenarioCtrlData->devNode_num; //场景设备数量赋值
+												scenarioOprateDats.scenarioCtrlOprate_IF = false; //主动触发操作，此判断条件不需要置位
+												
+												for(loop = 0; loop < scenarioOprateDats.devNode_num; loop ++){ //查找网关自身MAC是否在内
+												
+													if(!memcmp(&MACSTA_ID[1], scenarioOprateDats.scenarioOprate_Unit[loop].devNode_MAC, 5)){ //本身存在于场景就响应动作
+												
+														swCommand_fromUsr.objRelay = scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus;
+														swCommand_fromUsr.actMethod = relay_OnOff;
+														if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+														else
+														if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
+														
+														memset(&scenarioOprateDats.scenarioOprate_Unit[loop], 0, 1 * sizeof(scenarioOprateUnit_Attr)); //同时从场景控制表中剔除网关自身
+														memcpy(&scenarioOprateDats.scenarioOprate_Unit[loop], &scenarioOprateDats.scenarioOprate_Unit[loop + 1], (zigB_ScenarioCtrlDataTransASY_QbuffLen - loop - 1) * sizeof(scenarioOprateUnit_Attr));
+														scenarioOprateDats.devNode_num --;
+												
+														break;
+													}
+												}
+												
+												enum_zigbFunMsg mptr_zigbFunRm = msgFun_scenarioCrtl; //消息即刻转发至zigb线程进行场景集群控制下发
+												xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
+											}
+											else{
+
+												os_printf(">>>current scenario data is not reserve, scenarioReserve_opt:%02X\n", scenarioCtrlData->scenarioReserve_opt);
+											}
+
+											if(scenarioCtrlData)os_free(scenarioCtrlData); //内存释放
+
+										}break;
+
+										default:{
+
+
+
+										}break;
+									}
+								}
 
 							}break;
 
-							case ZIGB_ENDPOINT_CTRLNORMAL:{//端点口数据解析：常规控制
+							case ZIGB_ENDPOINT_CTRLNORMAL:{ //端点口数据解析：常规控制
 
 //								/*数据包log输出*/
 //								for(loop = 0;loop < local_datsRX->datsSTT.stt_MSG.datsLen;loop ++){
@@ -2199,7 +2316,8 @@ zigbeeDataTransProcess_task(void *pvParameters){
 										
 									}break;
 								}
-
+								
+								/*指定子设备数据探测，log输出*/
 								if(!memcmp(debugLogOut_targetMAC ,devMAC_Temp, 5)){
 
 									/*数据包log输出*/
@@ -2212,24 +2330,30 @@ zigbeeDataTransProcess_task(void *pvParameters){
 											  devMAC_Temp[4],
 											  local_datsRX->datsSTT.stt_MSG.Addr_from);
 
-									if(local_datsRX->datsSTT.stt_MSG.dats[9] == (0x38 + 7)){ //子设备 插座类型 数据调试输出
+									switch(local_datsRX->datsSTT.stt_MSG.dats[9]){ //指定调试专用MAC 不同的设备类型打印调试数据
 
-										u8 debugData_Temp[4] = {0};
-										char debug_str[12] = {0};
+										case SWITCH_TYPE_SOCKETS:{
 
-										/*8266 sdk库printf()没有 %f浮点数 打印功能，所以需要自定的ftoa转换*/
-										memcpy(debugData_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[72]), 4); //power频率
-										ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
-										os_printf("[dev_socket debugDats]: current powerFreq:%sHz,", debug_str);
-										
-										memcpy(debugData_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[64]), 4); //power值
-										ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
-										os_printf("valPower:%sW,", debug_str);
-										
-										memcpy(&debugData_Temp[1], &(local_datsRX->datsSTT.stt_MSG.dats[68]), 3); //电量值
-										debugData_Temp[0] = 0;
-										ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
-										os_printf("valEleConsum:%skWh.\n", debug_str);
+											u8 debugData_Temp[4] = {0};
+											char debug_str[12] = {0};
+
+											/*8266 sdk库printf()没有 %f浮点数 打印功能，所以需要自定义的ftoa转换*/
+											memcpy(debugData_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[72]), 4); //power频率
+											ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
+											os_printf("[dev_socket debugDats]: current powerFreq:%sHz,", debug_str);
+											
+											memcpy(debugData_Temp, &(local_datsRX->datsSTT.stt_MSG.dats[64]), 4); //power值
+											ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
+											os_printf("valPower:%sW,", debug_str);
+											
+											memcpy(&debugData_Temp[1], &(local_datsRX->datsSTT.stt_MSG.dats[68]), 3); //电量值
+											debugData_Temp[0] = 0;
+											ftoa(debug_str, bytesTo_float(debugData_Temp), 5);
+											os_printf("valEleConsum:%skWh.\n", debug_str);
+
+										}break;
+
+										default:{}break;
 									}
 								}
 
@@ -2294,8 +2418,8 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 							case ZIGB_ENDPOINT_CTRLSYSZIGB:{//端点口数据解析：zigbee系统控制交互专用端口
 
-								frame_zigbSysCtrl datsTempRX_zigbSysCtrl = {0}; //系统控制数据帧缓存
-								frame_zigbSysCtrl datsTempTX_zigbSysCtrl = {0}; //系统控制数据帧缓存
+								frame_zigbSysCtrl datsTempRX_zigbSysCtrl = {0}; //系统控制数据接收帧缓存
+								frame_zigbSysCtrl datsTempTX_zigbSysCtrl = {0}; //系统控制数据发送帧缓存
 								bool nodeCMDtranslate_EN = false; //远程数据传输使能
 
 								datsTempRX_zigbSysCtrl.command = local_datsRX->datsSTT.stt_MSG.dats[0]; //命令加载
@@ -2526,12 +2650,27 @@ zigbeeDataTransProcess_task(void *pvParameters){
 					if(!localZigbASYDT_bufQueueRemoteReq[local_insertRecord_datsReqNormal].repeat_Loop){
 
 						os_printf("preFail_rmDatatx warning, nwkAddr<0x%02X%02X>.\n", localZigbASYDT_bufQueueRemoteReq[local_insertRecord_datsReqNormal].dataReq[5], localZigbASYDT_bufQueueRemoteReq[local_insertRecord_datsReqNormal].dataReq[4]);
+
+						if((localZigbASYDT_bufQueueRemoteReq[local_insertRecord_datsReqNormal].dataReq[5] == 0xff) && //远端地址为0xff时为广播传输
+						   (localZigbASYDT_bufQueueRemoteReq[local_insertRecord_datsReqNormal].dataReq[4] == 0xff)){
+
+						   if(dataRemoteRequest_failCount < zigB_reconnectCauseDataReqFailLoop){
+						   
+							   dataRemoteRequest_failCount ++;
+							   
+						   }else{
+						   
+							   dataRemoteRequest_failCount = 0;
+							   nwkZigbOnline_IF = false; //远端广播数据传输失败次数超常，zigbee模块重启
+						   }
+						}
 					}
 				}
 				
 				local_insertRecord_datsReqNormal ++;
 				
-			}else{
+			}
+			else{
 
 				local_insertRecord_datsReqNormal = 0;
 			}
@@ -2567,6 +2706,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 								
 							}else{
 
+								
 							}
 						
 							loop_Insert_temp ++;	
@@ -2746,24 +2886,56 @@ zigbeeDataTransProcess_task(void *pvParameters){
 
 				os_printf("ctrl eachOther cmd coming, cluster:%02d, val:%02d, loop:%02d.\n", (int)rptr_ctrlEachDat.prot_Ep, (int)rptr_ctrlEachDat.ctrlEachOther_dat, (int)rptr_ctrlEachDat.ctrlEachOther_loop);
 
-				for(localActLoop = 0; localActLoop < USRCLUSTERNUM_CTRLEACHOTHER; localActLoop ++){
+				switch(SWITCH_TYPE){
 
-					if((rptr_ctrlEachDat.prot_Ep == CTRLEATHER_PORT[localActLoop]) && (rptr_ctrlEachDat.prot_Ep != 0)){ //有效互控端口判断
+					case SWITCH_TYPE_SWBIT1:
+					case SWITCH_TYPE_SWBIT2:
+					case SWITCH_TYPE_SWBIT3:{
 
-						if(rptr_ctrlEachDat.ctrlEachOther_loop > datsSend_requestEx[localActLoop].constant_Loop){ //loop大于本地才有效
-
-							statusRelay_temp &= ~(1 << localActLoop); //动作缓存位清零
-							swCommand_fromUsr.objRelay = statusRelay_temp | (rptr_ctrlEachDat.ctrlEachOther_dat << localActLoop); //对应bit 动作位加载
-							swCommand_fromUsr.actMethod = relay_OnOff;
-
-							datsSend_requestEx[localActLoop].constant_Loop = 0;  
-
-							localDataRecord_eaCtrl[localActLoop] = rptr_ctrlEachDat.ctrlEachOther_dat; //本地记录更新
-							(rptr_ctrlEachDat.ctrlEachOther_dat)?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[localActLoop]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[localActLoop]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
-
-							devStatus_pushIF = true; //开关状态数据推送
+						for(localActLoop = 0; localActLoop < USRCLUSTERNUM_CTRLEACHOTHER; localActLoop ++){
+						
+							if((rptr_ctrlEachDat.prot_Ep == CTRLEATHER_PORT[localActLoop]) && (rptr_ctrlEachDat.prot_Ep != 0)){ //有效互控端口判断
+						
+								if(rptr_ctrlEachDat.ctrlEachOther_loop > datsSend_requestEx[localActLoop].constant_Loop){ //loop大于本地才有效
+						
+									statusRelay_temp &= ~(1 << localActLoop); //动作缓存位清零
+									swCommand_fromUsr.objRelay = statusRelay_temp | (rptr_ctrlEachDat.ctrlEachOther_dat << localActLoop); //对应bit 动作位加载
+									swCommand_fromUsr.actMethod = relay_OnOff;
+						
+									datsSend_requestEx[localActLoop].constant_Loop = 0;  
+						
+									localDataRecord_eaCtrl[localActLoop] = rptr_ctrlEachDat.ctrlEachOther_dat; //本地记录更新
+									(rptr_ctrlEachDat.ctrlEachOther_dat)?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[localActLoop]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[localActLoop]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+						
+									devStatus_pushIF = true; //开关状态数据推送
+								}
+							}
 						}
-					}
+						
+					}break;
+
+					case SWITCH_TYPE_CURTAIN:{
+
+						if((rptr_ctrlEachDat.prot_Ep == CTRLEATHER_PORT[0]) && (rptr_ctrlEachDat.prot_Ep != 0)){ //有效互控端口判断
+						
+							if(rptr_ctrlEachDat.ctrlEachOther_loop > datsSend_requestEx[0].constant_Loop){ //loop大于本地才有效
+						
+								statusRelay_temp &= ~(1 << 0); //动作缓存位清零
+								swCommand_fromUsr.objRelay = statusRelay_temp | (rptr_ctrlEachDat.ctrlEachOther_dat << 0); //对应bit 动作位加载
+								swCommand_fromUsr.actMethod = relay_OnOff;
+						
+								datsSend_requestEx[0].constant_Loop = 0;  
+						
+								localDataRecord_eaCtrl[0] = rptr_ctrlEachDat.ctrlEachOther_dat; //本地记录更新
+								(rptr_ctrlEachDat.ctrlEachOther_dat)?(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_ON):(COLONY_DATAMANAGE_CTRLEATHER[CTRLEATHER_PORT[0]] = STATUSLOCALEACTRL_VALMASKRESERVE_OFF); //集群控制信息管理，互控信息掩码更新
+						
+								devStatus_pushIF = true; //开关状态数据推送
+							}
+						}
+
+					}break;
+
+					default:{}break;
 				}
 			}
 		}
@@ -2774,7 +2946,7 @@ zigbeeDataTransProcess_task(void *pvParameters){
 	vTaskDelete(NULL);
 }
 
-void ICACHE_FLASH_ATTR
+void 
 zigbee_mainThreadStart(void){
 
 	portBASE_TYPE xReturn = pdFAIL;
@@ -2784,7 +2956,7 @@ zigbee_mainThreadStart(void){
 	appMsgQueueCreat_timeStampGet();
 	appMsgQueueCreat_zigbFunRemind();
 	
-	xReturn = xTaskCreate(zigbeeDataTransProcess_task, "Process_Zigbee", 2048, (void *)NULL, 4, &pxTaskHandle_threadZigbee);
+	xReturn = xTaskCreate(zigbeeDataTransProcess_task, "Process_Zigbee", 1536, (void *)NULL, 5, &pxTaskHandle_threadZigbee);
 	os_printf("\nppxTaskHandle_threadZigbee is %d\n", pxTaskHandle_threadZigbee);
 }
 

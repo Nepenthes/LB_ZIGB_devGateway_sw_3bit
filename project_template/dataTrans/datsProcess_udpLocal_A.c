@@ -19,7 +19,7 @@ LOCAL struct espconn infoTemp_connUDP_local_A;
 LOCAL esp_udp ssdp_udp_local_A;		
 /*---------------------------------------------------------------------------------------------*/
 
-LOCAL void ICACHE_FLASH_ATTR
+LOCAL void 
 myUDP_local_ACallback(void *arg, char *pdata, unsigned short len){
 
 	bool dataCorrect_FLG = false;
@@ -147,14 +147,14 @@ myUDP_local_ACallback(void *arg, char *pdata, unsigned short len){
 	}
 }
 
-void ICACHE_FLASH_ATTR
+void 
 UDPlocalA_datsSend(u8 dats[], u16 datsLen){
 
 	espconn_sent(&infoTemp_connUDP_local_A, dats, datsLen);
-	os_printf("[Tips_socketUDP_A]: msg send ok!!!\n");
+//	os_printf("[Tips_socketUDP_A]: msg send ok!!!\n");
 }
 
-void ICACHE_FLASH_ATTR
+void 
 mySocketUDPlocal_A_buildInit(void){
 
 	ssdp_udp_local_A.local_port = 8866; //建立本地udp链接
