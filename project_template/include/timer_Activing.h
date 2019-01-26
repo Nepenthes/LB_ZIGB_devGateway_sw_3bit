@@ -47,6 +47,8 @@ extern bool	ifNightMode_sw_running_FLAG; //设备夜间模式运行标志
 void sntp_timerActThread_Start(void);
 void timActing_ThreadStart(void);
 
+void timerActionDone_FLG_RESET(void);
+
 void timeZone_Reales(void);
 void datsTiming_getRealse(void);
 void datsDelayOP_getReales(void);

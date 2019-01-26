@@ -58,8 +58,11 @@ relay_statusReales(void){
 					PIN_RELAY_1 = PIN_RELAY_2 = PIN_RELAY_3 = 0;
 					curtainAct_Param.act = cTact_stop;
 
-					datsSave_Temp.devCurtain_orbitalCounter = curtainAct_Param.act_counter; //每次窗帘运动停止时，记录当前位置对应的计时变量值
-					devParam_flashDataSave(obj_devCurtainOrbitalCounter, datsSave_Temp); //本地存储动作执行
+					if(curtainAct_Param.act != cTact_stop){
+
+						datsSave_Temp.devCurtain_orbitalCounter = curtainAct_Param.act_counter; //每次窗帘运动停止时，记录当前位置对应的计时变量值
+						devParam_flashDataSave(obj_devCurtainOrbitalCounter, datsSave_Temp); //本地存储动作执行
+					}
 					
 				}break;
 			}

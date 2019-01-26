@@ -704,9 +704,9 @@ void user_init(void)
 	timeZone_Reales(); //时区更新
 	curtainOrbitalPeriod_Reales(); //窗帘轨道周期更新
 	
-//	wifi_station_disconnect();
-	devConnectAP_autoInit("LANBON_DEVELOP002", "Lanbon22*#"); //调试时直接连wifi
-//	wifi_station_set_auto_connect(1); 
+	wifi_station_disconnect();
+//	devConnectAP_autoInit("LANBON_DEVELOP002", "Lanbon22*#"); //调试时直接连wifi
+	wifi_station_set_auto_connect(1); 
 
 	uart1Init_Debug();
 	uart0Init_datsTrans();
@@ -741,6 +741,8 @@ void user_init(void)
 	os_timer_arm(&usrTimer_reference, TIMERPERIOD_SPECIAL1MS_FUN, true);
 
 //	xTaskCreate(myProcess_task, "myProcess_task", 1024, NULL, 3, NULL);
+
+	beeps_usrActive(3, 100, 1);
 
 	os_printf("Hellow world!!!\n");
 //	os_printf("reserve heap : %d. \n", system_get_free_heap_size());

@@ -6,6 +6,7 @@
 #include "bsp_Hardware.h"
 #include "datsManage.h"
 #include "hwPeripherial_Actuator.h"
+#include "usrInterface_keylbutton.h"
 
 extern bool nwkZigbOnline_IF;
 extern bool nwkInternetOnline_IF;
@@ -98,6 +99,7 @@ void
 tips_statusChangeToAPFind(void){
 
 	devTips_status = status_tipsAPFind;
+	devNwkTips_status = devNwkStaute_wifiNwkFind;
 	thread_tipsGetDark(0x0F);
 }
 
@@ -107,6 +109,7 @@ tips_statusChangeToZigbNwkOpen(u8 timeopen){
 
 	timeCount_zigNwkOpen = timeopen;
 	devTips_status = status_tipsNwkOpen;
+	devNwkTips_status = devNwkStaute_zigbNwkOpen;
 	thread_tipsGetDark(0x0F);
 }
 
@@ -175,7 +178,7 @@ devNwkStatusTips_refresh(void){
 	if(nwkZigbOnline_IF)nwkStatus |= 0x01;	//bit0±íÊ¾zigb×´Ì¬
 	if(nwkInternetOnline_IF)nwkStatus |= 0x02; //bit1±íÊ¾wifi×´Ì¬
 
-	if( (devNwkTips_status != devNwkStaute_zigbNwkOpen) || 
+	if( (devNwkTips_status != devNwkStaute_zigbNwkOpen) &&
 		(devNwkTips_status != devNwkStaute_wifiNwkFind) ){
 
 		switch(nwkStatus){
@@ -252,6 +255,8 @@ usrTipsProcess_task(void *pvParameters){
 			case status_Normal:{
 
 				u8 relayStatus_tipsTemp = 0;
+
+				if(!timeCount_zigNwkOpen && !timeCounter_smartConfig_start)devNwkTips_status = devNwkStaute_nwkAllNormal;
 				
 				if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1){
 				
@@ -364,7 +369,7 @@ usrTipsProcess_task(void *pvParameters){
 				/*zigbÍøÂç×´Ì¬Ö¸Ê¾*/
 				{
 					static u16 tips_Counter = 0;
-					const u16 tips_Period = 200;
+					const u16 tips_Period = 40;
 
 					static bool tips_Type = 0;
 
@@ -402,9 +407,9 @@ usrTipsProcess_task(void *pvParameters){
 						
 							}break;
 						
-							case devNwkStaute_zigbNwkOpen:{ //À¶ÉÁ
+							case devNwkStaute_zigbNwkOpen:{ //ÂÌÉÁ
 
-								(tips_Type)?(tipsLED_rgbColorSet(3, 0, 0, 31)):(tipsLED_rgbColorSet(3, 0, 0, 0));
+								(tips_Type)?(tipsLED_rgbColorSet(3, 0, 31, 0)):(tipsLED_rgbColorSet(3, 0, 0, 0));
 						
 							}break;
 							

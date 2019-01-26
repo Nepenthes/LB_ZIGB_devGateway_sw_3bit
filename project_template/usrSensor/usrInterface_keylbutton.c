@@ -121,6 +121,8 @@ usrSoftAP_Config(void){
 
 	wifi_set_opmode(SOFTAP_MODE);
 	wifi_softap_set_config(&usrAP_config);
+
+	beeps_usrActive(3, 20, 2);
 }
 
 void 
@@ -134,6 +136,8 @@ usrSmartconfig_stop(void){
 		
 		smartconfig_stop();
 		somartConfig_complete(); //¶¨Ê±Æ÷»Ö¸´
+
+		beeps_usrActive(3, 20, 2);
 		
 		os_printf("smartconfig stop.\n");
 	}
@@ -151,6 +155,8 @@ usrSmartconfig_start(void){
 	
 	timeCounter_smartConfig_start = SMARTCONFIG_TIMEOPEN_DEFULT;
 	smartconfigOpen_flg = true;
+
+	beeps_usrActive(3, 20, 2);
 }
 
 void 
@@ -159,6 +165,8 @@ usrZigbNwkOpen_start(void){
 	enum_zigbFunMsg mptr_zigbFunRm = msgFun_nwkOpen;
 	xQueueSend(xMsgQ_zigbFunRemind, (void *)&mptr_zigbFunRm, 0);
 	tips_statusChangeToZigbNwkOpen(ZIGBNWKOPENTIME_DEFAULT);
+
+	beeps_usrActive(3, 20, 2);
 
 	os_printf("zigbNwk open start!!!.\n");
 }
@@ -281,7 +289,7 @@ LOCAL void normalBussiness_shortTouchTrig(u8 statusPad, bool shortPressCnt_IF){
 
 	if(!shortPressCnt_IF){ //·ÇÁ¬°´²Å´¥·¢»¥¿Ø
 	
-		if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //ÓÐÐ§»¥¿Ø´¥·¢
+		if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG = swCommand_fromUsr.objRelay; //ÓÐÐ§»¥¿Ø´¥·¢(Ö±½Ó´¥·¢¶ÔÓ¦¼ü»¥¿Ø)
 		else
 		if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //ÓÐÐ§»¥¿Ø´¥·¢
 	}
@@ -391,7 +399,7 @@ touchPad_functionTrigNormal(u8 statusPad, keyCfrm_Type statusCfm){ //ÆÕÍ¨´¥Ãþ°´¼
 LOCAL void 
 touchPad_functionTrigContinue(u8 statusPad, u8 loopCount){	//ÆÕÍ¨´¥Ãþ°´¼üÁ¬°´´¥·¢
 	
-	if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG = statusPad; //Á¬°´×îºóÒ»´Î´¥·¢ÓÐÐ§»¥¿Ø
+	if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG = swCommand_fromUsr.objRelay; //Á¬°´×îºóÒ»´Î´¥·¢ÓÐÐ§»¥¿Ø
 	else
 	if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //ÓÐÐ§»¥¿Ø´¥·¢
 	devStatus_pushIF = true; //Á¬°´½áÊøºó´¥·¢¿ª¹Ø×´Ì¬Êý¾ÝÍÆËÍ

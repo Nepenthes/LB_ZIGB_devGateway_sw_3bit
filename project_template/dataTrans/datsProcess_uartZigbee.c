@@ -496,6 +496,9 @@ myUart0datsTrans_intr_funCB(void *para){
 				u8 frameParsing_num = 0; //已解析的数据帧数量
 				u8 frameTotal_Len = 0; //单位总帧长缓存
 
+				const u8 dataProcess_loopLimit = 40; //数据反复处理次数限定值
+				u8 dataProcess_loopout = 0;  //数据反复处理计次变量
+
 				while(frameNum_reserve){
 
 					sttUartRcv_rmoteDatComming mptr_rmoteDatComming;
@@ -607,6 +610,18 @@ myUart0datsTrans_intr_funCB(void *para){
 //																										uartBuff_baseInsertStart);
 						}
 					}				
+
+					if(dataProcess_loopout < dataProcess_loopLimit){ //中断数据处理超时限定，反复处理次数不超过dataProcess_loopLimit次
+					
+						dataProcess_loopout ++;
+						if(dataProcess_loopout % 10)system_soft_wdt_feed();
+					}
+					else{
+
+						uartBuff_baseInsertStart = 0; //抛弃残帧
+						frameNum_reserve = 0; //数据长度剩余数强制清零
+						break;
+					}
 				}
 
 //				if(uart0_rxTemp[1] != (fifo_Num - 5)){
@@ -891,7 +906,7 @@ zigb_clusterCtrlEachotherCfg(void){
 LOCAL bool 
 zigbNetwork_OpenIF(bool opreat_Act, u8 keepTime){
 
-	const datsAttr_ZigbInit default_param = {{0x26,0x08}, {0xFF,0xFF,0x00}, 0x03, {0xFE,0x01,0x66,0x08,0x00,0x6F}, 0x06, 500};	//命令帧，默认参数
+	const datsAttr_ZigbInit default_param = {{0x26,0x08}, {0xFC,0xFF,0x00}, 0x03, {0xFE,0x01,0x66,0x08,0x00,0x6F}, 0x06, 500};	//命令帧，默认参数
 #define nwOpenIF_paramLen 64
 
 	bool result_Set = false;
@@ -910,8 +925,8 @@ zigbNetwork_OpenIF(bool opreat_Act, u8 keepTime){
 									3,		//3次以内无正确响应则失败
 									default_param.timeTab_waitAnsr);	
 
-	if(result_Set)os_printf("[Tips_uartZigb]: zigb nwkOpreat success.\n");
-	else os_printf("[Tips_uartZigb]: zigbSystime nwkOpreat fail.\n");
+	if(result_Set)os_printf("[Tips_uartZigb]: zigb nwkOpen success.\n");
+	else os_printf("[Tips_uartZigb]: zigb nwkOpen fail.\n");
 
 	return result_Set;
 }
@@ -2112,8 +2127,8 @@ zigbeeDataTransProcess_task(void *pvParameters){
 						   
 						   	{
 
-								const  u8 localPeriod_nwkTrig = 2;
-								static u8 localCount_searchREQ = 4;
+								const  u8 localPeriod_nwkTrig = 1;
+								static u8 localCount_searchREQ = 2;
 
 								if(localCount_searchREQ < localPeriod_nwkTrig)localCount_searchREQ ++;
 								else{ //localPeriod_nwkTrig次搜索触发一次开放网络，取决于搜索码发送周期

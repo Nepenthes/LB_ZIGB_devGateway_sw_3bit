@@ -45,6 +45,8 @@ u8	delayUp_act				= 0;	//延时响应具体动作
 u16	delayCnt_closeLoop		= 0;	//绿色模式计时计数
 u8	delayPeriod_closeLoop	= 0;	//绿色模式动作周期
 
+LOCAL u8 timeUp_actionDone_flg = false; //同一分钟内定时器响应动作完成标志<同一分钟内只响应一次定时动作>
+
 LOCAL os_timer_t timer_sntpTimerAct;
 LOCAL xTaskHandle pxTaskHandle_threadtimActing;
 /*---------------------------------------------------------------------------------------------*/
@@ -238,13 +240,17 @@ datsDelayOP_getReales(void){
 	if(datsRead_Temp)os_free(datsRead_Temp);
 }
 
+void 
+timerActionDone_FLG_RESET(void){
+
+	timeUp_actionDone_flg = 0;
+}
+
 LOCAL void 
 timActingProcess_task(void *pvParameters){
 
 	stt_usrDats_privateSave datsSave_Temp = {0};
 	stt_usrDats_privateSave *datsRead_Temp;
-
-	u8 timeUp_actionDone_flg = false; //同一分钟内定时器响应动作完成标志<同一分钟内只响应一次定时动作>
 
 	u16 log_CountA = 0;
 	u16 log_CountB = 0;
@@ -383,7 +389,7 @@ timActingProcess_task(void *pvParameters){
 								swTim_onShoot_FLAG &= ~(1 << loop);
 
 								datsRead_Temp = devParam_flashDataRead(); //定时表缓存更新
-								memcpy(datsSave_Temp.swTimer_Tab, datsRead_Temp->swTimer_Tab, 3 * 4); 
+								memcpy(datsSave_Temp.swTimer_Tab, datsRead_Temp->swTimer_Tab, 3 * TIMEER_TABLENGTH); 
 								if(datsRead_Temp)os_free(datsRead_Temp);
 								datsSave_Temp.swTimer_Tab[loop * 3] = 0; //定时表缓存局部清除
 								devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //存储数据更新
@@ -409,7 +415,7 @@ timActingProcess_task(void *pvParameters){
 							   swTim_onShoot_FLAG &= ~(1 << loop);
 						   
 							   datsRead_Temp = devParam_flashDataRead(); //定时表缓存更新
-							   memcpy(datsSave_Temp.swTimer_Tab, datsRead_Temp->swTimer_Tab, 3 * 4); 
+							   memcpy(datsSave_Temp.swTimer_Tab, datsRead_Temp->swTimer_Tab, 3 * TIMEER_TABLENGTH); 
 							   if(datsRead_Temp)os_free(datsRead_Temp);
 							   datsSave_Temp.swTimer_Tab[loop * 3] = 0; //定时表缓存局部清除，只清除周占位，不清楚时间
 							   devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //存储数据更新

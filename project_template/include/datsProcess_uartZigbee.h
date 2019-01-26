@@ -38,7 +38,7 @@
 
 #define ZIGBPANID_CURRENT_REALESPERIOD	50 //PANID数据实时更新周期 单位：s
 
-#define ZIGBNWKOPENTIME_DEFAULT	30 //zigb网络开放时间 默认值 单位：ms
+#define ZIGBNWKOPENTIME_DEFAULT	15 //zigb网络开放时间 默认值 单位：ms
 
 #define ZIGB_PANID_MAXVAL     	0x3FFF //随机产生PANID最大值
 
@@ -54,7 +54,7 @@
 #define zigB_remoteDataTransASY_txReapt			10	//单条数据请求重复次数
 #define zigB_remoteDataTransASY_txUartOnceWait	4	//异步串口通信远端数据请求单次等待时间 单位：10ms
 
-#define zigB_reconnectCauseDataReqFailLoop		4	//因为远端数据传输错误次数超出定义范围 判断zigbee模块重启
+#define zigB_reconnectCauseDataReqFailLoop		1	//因为远端数据传输错误次数超出定义范围 判断zigbee模块重启
 
 #define zigB_ScenarioCtrlDataTransASY_txBatchs_EN			0	//异步串口通信远端场景控制数据请求多批次分发使能
 #define zigB_ScenarioCtrlDataTransASY_opreatOnceNum			10	//场景控制逻辑业务单轮操作单位数目(大包场次分批次异步发送，单轮/单批次数目)

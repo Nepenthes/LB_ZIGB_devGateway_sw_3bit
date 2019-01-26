@@ -283,7 +283,7 @@ timer_heartBeatKeep_funCB(void *para){
 
 //				printf_datsHtoA("btMode data upload:", dev_currentDataPoint.devData_nightMode, 6);
 			}
-			memcpy(&(dev_currentDataPoint.devData_bkLight[0]), &(datsRead_Temp->param_bkLightColorInsert), 2);
+			memcpy(&(dev_currentDataPoint.devData_bkLight[0]), &devBackgroundLight_param, 2);
 			dev_currentDataPoint.devData_devReset = 0;
 			memcpy(dev_currentDataPoint.devData_switchBitBind, CTRLEATHER_PORT, USRCLUSTERNUM_CTRLEACHOTHER);
 
@@ -330,7 +330,7 @@ timer_heartBeatKeep_funCB(void *para){
 
 			sockets_datsSend(Obj_udpRemote_B, frameTx_temp, frameTx_dataLen);
 
-			printf_datsHtoB("[Tips_threadNet]: current aging bit hold:", (u8 *)(&dev_currentDataPoint.devAgingOpreat_agingReference), sizeof(stt_agingDataSet_bitHold));
+//			printf_datsHtoB("[Tips_threadNet]: current aging bit hold:", (u8 *)(&dev_currentDataPoint.devAgingOpreat_agingReference), sizeof(stt_agingDataSet_bitHold));
 			
 //			printf_datsHtoA("[Tips_threadNet]: hearBeat datsSend is:", heartBeat_Pack, dataHeartBeatLength_objSERVER);
 //			(heartbeat_oeFLG)?(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats1, 14)):(sockets_datsSend(Obj_udpRemote_B, (u8 *)test_Dats2, 14));
@@ -384,6 +384,8 @@ socketsDataTransProcess_task(void *pvParameters){
 
 				if((rptr_socketDats.dstObj == obj_toWIFI) || //数据是给网关的，则直接解析数据，远端数据已做缩减处理为和本地数据格式相同，直接解析数据即可
 				   (rptr_socketDats.dstObj == obj_toALL)){ 
+
+				   beeps_usrActive(3, 25, 1);
 
 					switch(rptr_socketDats.command){
 		
@@ -1046,6 +1048,7 @@ socketsDataTransProcess_task(void *pvParameters){
 												}
 												memcpy(datsSave_Temp.swTimer_Tab, dev_dataPointTemp.devData_timer, 8 * 3); //本地存储更新
 												devParam_flashDataSave(obj_swTimer_Tab, datsSave_Temp); //本地存储动作执行
+												timerActionDone_FLG_RESET(); //定时段动作完成标志清空复位，允许当前时间定时反复操作并立即响应
 												
 												datsTiming_getRealse(); //本地运行数据更新
 	
