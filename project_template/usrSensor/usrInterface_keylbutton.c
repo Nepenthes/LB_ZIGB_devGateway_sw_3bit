@@ -91,10 +91,10 @@ usrFunCB_pressLongB(void){
 //	mptr_upgrade = 0;
 //	xQueueSend(xMsgQ_devUpgrade, (void *)&mptr_upgrade, 0);
 
-	beeps_usrActive(3, 20, 2);
+	beeps_usrActive(1, 254, 3);
 	tips_statusChangeToFactoryRecover();
 	devData_recoverFactory(); //恢复出厂挂起4s，等待提示结束
-	vTaskDelay(400); 
+	vTaskDelay(800); 
 	system_restart();
 }
 

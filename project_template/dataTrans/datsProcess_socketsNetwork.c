@@ -796,9 +796,11 @@ socketsDataTransProcess_task(void *pvParameters){
 
 										swCommand_fromUsr.objRelay = scenarioOprateDats.scenarioOprate_Unit[loop].devNode_opStatus;
 										swCommand_fromUsr.actMethod = relay_OnOff;
-										if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
-										else
-										if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
+
+										/*场景是否触发互控?*/
+//										if(SWITCH_TYPE == SWITCH_TYPE_SWBIT1 || SWITCH_TYPE == SWITCH_TYPE_SWBIT2 || SWITCH_TYPE == SWITCH_TYPE_SWBIT3)EACHCTRL_realesFLG |= (status_actuatorRelay ^ swCommand_fromUsr.objRelay); //有效互控位触发
+//										else
+//										if(SWITCH_TYPE == SWITCH_TYPE_CURTAIN)EACHCTRL_realesFLG = 1; //有效互控触发
 										
 										memset(&scenarioOprateDats.scenarioOprate_Unit[loop], 0, 1 * sizeof(scenarioOprateUnit_Attr)); //同时从场景控制表中剔除网关自身
 										memcpy(&scenarioOprateDats.scenarioOprate_Unit[loop], &scenarioOprateDats.scenarioOprate_Unit[loop + 1], (zigB_ScenarioCtrlDataTransASY_QbuffLen - loop - 1) * sizeof(scenarioOprateUnit_Attr));
